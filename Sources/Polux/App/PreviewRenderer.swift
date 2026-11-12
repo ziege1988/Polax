@@ -59,12 +59,21 @@ enum PreviewRenderer {
             .pexels: .missing,
             .deviantart: .unknown
         ]
-        let sources = SourcesSettingsView()
-            .environmentObject(store)
-            .environmentObject(engine)
-            .environmentObject(settings)
-            .environmentObject(updater)
-        snapshotWindow(sources, size: NSSize(width: 780, height: 1500), to: dir.appendingPathComponent("settings-sources.png"))
+        let nav = SettingsNavigation.shared
+        let pages: [(SettingsPage, String)] = [
+            (.sourcesOverview, "settings-sources"),
+            (.source(.unsplash), "settings-source-detail"),
+            (.collection(colID), "settings-collection")
+        ]
+        for (page, name) in pages {
+            nav.page = page
+            let view = SettingsView()
+                .environmentObject(store)
+                .environmentObject(engine)
+                .environmentObject(settings)
+                .environmentObject(updater)
+            snapshotWindow(view, size: NSSize(width: 940, height: 760), to: dir.appendingPathComponent("\(name).png"))
+        }
         store.saveNow()
     }
 

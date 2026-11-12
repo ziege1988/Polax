@@ -154,17 +154,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     }
 
     func showSettings(_ tab: SettingsTab) {
-        SettingsNavigation.shared.tab = tab
+        SettingsNavigation.shared.open(tab, currentCollection: store.currentCollectionID)
         if settingsWindow == nil {
             let view = SettingsView()
                 .environmentObject(store)
                 .environmentObject(engine)
                 .environmentObject(settings)
                 .environmentObject(updater)
-            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 620),
-                             styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 940, height: 680),
+                             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                              backing: .buffered, defer: false)
             w.title = "Polux – Einstellungen"
+            w.titlebarAppearsTransparent = true
+            w.setFrameAutosaveName("PoluxSettings")
             w.contentView = NSHostingView(rootView: view)
             w.isReleasedWhenClosed = false
             w.center()

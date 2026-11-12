@@ -87,3 +87,7 @@ Wird bei jedem Build automatisch auf einem Mac gerendert (mit Platzhalterbildern
 | Polaroid | Galerie |
 |---|---|
 | ![Polaroid](docs/preview/polaroid.jpg) | ![Galerie](docs/preview/gallery.jpg) |
+
+| Einstellungen: Bildquellen | Einstellungen: Quelle einrichten | Einstellungen: Sammlung |
+|---|---|---|
+| ![Quellen](docs/preview/settings-sources.jpg) | ![Quelle](docs/preview/settings-source-detail.jpg) | ![Sammlung](docs/preview/settings-collection.jpg) |
