@@ -17,7 +17,11 @@ final class ConnectionTester: ObservableObject {
     @Published private var statuses: [SourceKind: Status] = [:]
     @Published private(set) var lastChecked: [SourceKind: Date] = [:]
 
+    /// Nur für das Vorschau-Rendering.
+    var previewOverrides: [SourceKind: Status] = [:]
+
     func status(_ kind: SourceKind) -> Status {
+        if let o = previewOverrides[kind] { return o }
         if !Providers.hasCredentials(kind) { return .missing }
         return statuses[kind] ?? .unknown
     }

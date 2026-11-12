@@ -33,11 +33,13 @@ jobs:
         run: ./scripts/build-app.sh
 
       - name: Layout-Vorschau rendern
+        continue-on-error: true
         run: |
           export POLUX_HOME="$RUNNER_TEMP/polux-preview"
           dist/Polux.app/Contents/MacOS/Polux --render-preview "$RUNNER_TEMP/preview"
           mkdir -p docs/preview
-          for f in polaroid gallery; do
+          for f in polaroid gallery settings-sources; do
+            [ -f "$RUNNER_TEMP/preview/$f.png" ] || continue
             sips -s format jpeg -s formatOptions 80 -Z 1400 "$RUNNER_TEMP/preview/$f.png" --out "docs/preview/$f.jpg" >/dev/null
           done
           ls -la docs/preview

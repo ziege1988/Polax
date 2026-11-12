@@ -326,6 +326,7 @@ struct SourcesSettingsView: View {
             daSecret = Keychain.get(.deviantartSecret) ?? ""
             DispatchQueue.main.async { loaded = true }
             // Konfigurierte, noch ungeprüfte Quellen automatisch testen.
+            if PreviewRenderer.isRendering { return }
             Task { @MainActor in
                 for kind in [SourceKind.openverse, .unsplash, .flickr, .pexels, .deviantart, .artstation]
                 where tester.status(kind) == .unknown {

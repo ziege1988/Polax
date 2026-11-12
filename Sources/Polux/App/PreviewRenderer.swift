@@ -48,7 +48,46 @@ enum PreviewRenderer {
             .environmentObject(engine)
             .frame(width: 960)
         write(gallery, to: dir.appendingPathComponent("gallery.png"))
+
+        // Einstellungen „Quellen“ mit Beispiel-Status
+        let tester = ConnectionTester.shared
+        tester.previewOverrides = [
+            .openverse: .ok("Verbunden · 20 Testtreffer"),
+            .artstation: .failed("ArtStation blockiert die Anfrage gerade (HTTP 403). Später erneut versuchen."),
+            .unsplash: .ok("Verbunden · 30 Testtreffer"),
+            .flickr: .failed("Flickr: Invalid API Key (Key has invalid format)"),
+            .pexels: .missing,
+            .deviantart: .unknown
+        ]
+        let sources = SourcesSettingsView()
+            .environmentObject(store)
+            .environmentObject(engine)
+            .environmentObject(settings)
+            .environmentObject(updater)
+        snapshotWindow(sources, size: NSSize(width: 780, height: 1500), to: dir.appendingPathComponent("settings-sources.png"))
         store.saveNow()
+    }
+
+    /// Rendert über eine echte (unsichtbare) Fensteransicht – nötig für Formulare und Textfelder.
+    private static func snapshotWindow<V: View>(_ view: V, size: NSSize, to url: URL) {
+        let hosting = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        hosting.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -4000, y: -4000), size: size),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: .aqua)
+        window.contentView = hosting
+        window.orderFrontRegardless()
+        for _ in 0..<5 {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+            hosting.layoutSubtreeIfNeeded()
+        }
+        guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return }
+        hosting.cacheDisplay(in: hosting.bounds, to: rep)
+        if let data = rep.representation(using: .png, properties: [:]) {
+            try? data.write(to: url)
+            print("Polux preview: wrote \(url.path)")
+        }
+        window.orderOut(nil)
     }
 
     private static func write<V: View>(_ view: V, to url: URL) {
