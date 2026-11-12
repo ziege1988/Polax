@@ -107,7 +107,7 @@ struct TokenEditor: View {
                     }
                 }
             }
-            TextField(placeholder, text: $input)
+            TextField("Hinzufügen", text: $input, prompt: Text(placeholder))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(commit)
         }

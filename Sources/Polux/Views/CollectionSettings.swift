@@ -72,7 +72,7 @@ struct CollectionEditor: View {
                         HStack {
                             Text(kind.displayName)
                             SourceStatusBadge(kind: kind)
-                            if kind.needsCredentials && !Providers.hasCredentials(kind) {
+                            if kind.needsCredentials && ConnectionTester.shared.status(kind) == .missing {
                                 Button("Schlüssel fehlt") { SettingsNavigation.shared.page = .source(kind) }
                                     .buttonStyle(.link)
                                     .font(.caption)
@@ -100,7 +100,7 @@ struct CollectionEditor: View {
                     }
                 }
                 HStack {
-                    TextField("https://www.pinterest.com/nutzer/board/", text: $newFeed)
+                    TextField("Board-Adresse", text: $newFeed, prompt: Text("https://www.pinterest.com/nutzer/board/"))
                         .onSubmit(addFeed)
                     Button("Hinzufügen", action: addFeed)
                         .disabled(newFeed.trimmingCharacters(in: .whitespaces).isEmpty)
