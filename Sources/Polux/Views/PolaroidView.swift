@@ -226,7 +226,20 @@ struct PolaroidView: View {
         }
     }
 
+    @ViewBuilder
     private func addToCollectionMenu(icon: CGFloat) -> some View {
+        if PreviewRenderer.isRendering {
+            // Menüs lassen sich offscreen nicht rendern – in der Vorschau nur das Symbol zeigen.
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: icon * 0.95))
+                .foregroundColor(Theme.ink)
+                .frame(width: icon * 1.5, height: icon * 1.5)
+        } else {
+            collectionMenu(icon: icon)
+        }
+    }
+
+    private func collectionMenu(icon: CGFloat) -> some View {
         let others = store.collections.filter { $0.id != store.currentCollectionID }
         return Menu {
             if others.isEmpty {

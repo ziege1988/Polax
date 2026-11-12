@@ -5,9 +5,12 @@ import SwiftUI
 /// (`Polux --render-preview <ordner>`). Wird in der CI genutzt, um das Layout zu prüfen.
 @MainActor
 enum PreviewRenderer {
+    static var isRendering = false
+
     static func render(to dir: URL, store: LibraryStore, engine: InspirationEngine,
                        settings: AppSettings, updater: UpdateChecker) {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        isRendering = true
         let colID = store.currentCollectionID
 
         // Beispiel-Likes für die Galerie
