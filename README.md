@@ -79,3 +79,11 @@ Sources/Polux/
 ```
 
 Daten liegen unter `~/Library/Application Support/Polux/`, der Cache unter `~/Library/Caches/Polux/`.
+
+## Vorschau
+
+Wird bei jedem Build automatisch auf einem Mac gerendert (mit Platzhalterbildern):
+
+| Polaroid | Galerie |
+|---|---|
+| ![Polaroid](docs/preview/polaroid.jpg) | ![Galerie](docs/preview/gallery.jpg) |

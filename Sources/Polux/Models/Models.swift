@@ -189,7 +189,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
 
     static func starter() -> PhotoCollection {
         PhotoCollection(
-            name: "CZ Inspiration",
+            name: "Dark Art",
             keywords: ["dark fine art portrait", "low key portrait", "cinematic portrait",
                        "veil portrait", "fine art nude", "chiaroscuro photography"],
             allowNudity: true,
