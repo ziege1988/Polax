@@ -44,7 +44,18 @@ struct GalleryView: View {
     private var header: some View {
         let c = collection
         let learned = c.map { StyleEngine.termProfile(for: $0).learned } ?? []
-        return HStack(alignment: .top) {
+        return VStack(alignment: .leading, spacing: 0) {
+            // Schwarzer Balken über die gesamte Breite mit großem Schriftzug links
+            HStack {
+                PoluxWordmark(size: 46, color: .white)
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, isPreview ? 18 : 34)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(c?.name ?? "Sammlung")
                     .font(.system(size: 30, weight: .semibold))
@@ -59,12 +70,10 @@ struct GalleryView: View {
                         .foregroundColor(Theme.muted)
                 }
             }
-            Spacer()
-            PoluxWordmark(size: 26, inverted: true)
+            .padding(.horizontal, 24)
+            .padding(.top, 18)
+            .padding(.bottom, 4)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, isPreview ? 24 : 40)
-        .padding(.bottom, 12)
     }
 
     private var emptyState: some View {

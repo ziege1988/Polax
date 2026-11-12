@@ -48,6 +48,11 @@ struct PolaroidView: View {
             RoundedRectangle(cornerRadius: w * 0.028, style: .continuous)
                 .stroke(Color.black.opacity(0.06), lineWidth: 0.5)
         )
+        .overlay(alignment: .topTrailing) {
+            CloseButton(size: max(8, pad * 0.62))
+                .padding(.top, (pad - max(8, pad * 0.62) * 1.6) / 2)
+                .padding(.trailing, (pad - max(8, pad * 0.62) * 1.6) / 2)
+        }
         .shadow(color: .black.opacity(0.32), radius: 16, x: 0, y: 9)
         .padding(Self.shadowMargin)
         .environment(\.colorScheme, .light)
@@ -86,18 +91,6 @@ struct PolaroidView: View {
             }
         }
         .frame(width: width, height: height)
-        .overlay(alignment: .bottomLeading) {
-            if let e = engine.current {
-                Text(e.candidate.origin)
-                    .font(.system(size: max(11, width * 0.042), weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-                    .padding(.horizontal, width * 0.04)
-                    .padding(.vertical, width * 0.018)
-                    .background(Capsule().fill(Color.black.opacity(0.72)))
-                    .padding(width * 0.035)
-            }
-        }
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 6) {
                 if engine.isBusy && engine.currentImage != nil {
@@ -272,6 +265,27 @@ struct PolaroidView: View {
         .frame(width: icon * 1.5, height: icon * 1.5)
         .help("Zu einer anderen Sammlung hinzufügen")
         .disabled(engine.current == nil)
+    }
+}
+
+/// Dezentes x oben rechts im Rahmen – beendet Polux.
+private struct CloseButton: View {
+    var size: CGFloat
+    @State private var hovering = false
+
+    var body: some View {
+        Button {
+            NSApp.terminate(nil)
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: size, weight: .semibold))
+                .foregroundColor(Theme.muted.opacity(hovering ? 1 : 0.55))
+                .frame(width: size * 1.6, height: size * 1.6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Polux beenden")
     }
 }
 

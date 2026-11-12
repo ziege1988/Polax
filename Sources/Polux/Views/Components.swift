@@ -13,6 +13,7 @@ enum Theme {
 struct PoluxWordmark: View {
     var size: CGFloat
     var inverted: Bool = false
+    var color: Color? = nil
 
     var body: some View {
         let text = Text("polux")
@@ -25,7 +26,7 @@ struct PoluxWordmark: View {
                 .padding(.vertical, size * 0.22)
                 .background(Color.black)
         } else {
-            text.foregroundColor(Theme.ink.opacity(0.82))
+            text.foregroundColor(color ?? Theme.ink.opacity(0.82))
         }
     }
 }
