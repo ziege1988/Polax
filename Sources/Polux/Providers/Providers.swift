@@ -237,6 +237,11 @@ actor DeviantArtAuth {
         let error_description: String?
     }
 
+    func reset() {
+        token = nil
+        expiry = .distantPast
+    }
+
     func accessToken() async throws -> String {
         if let t = token, Date() < expiry { return t }
         guard let id = Keychain.get(.deviantartID), let secret = Keychain.get(.deviantartSecret) else {

@@ -261,27 +261,28 @@ final class InspirationEngine: ObservableObject {
 
         for attempt in 0..<2 where fresh.isEmpty {
             let queries = StyleEngine.queries(for: col, profile: prof, count: 3, preferLearned: preferLearned && attempt == 0)
-            let results = await withTaskGroup(of: Result<[PhotoCandidate], Error>.self) { group -> [Result<[PhotoCandidate], Error>] in
+            let results = await withTaskGroup(of: (SourceKind, Result<[PhotoCandidate], Error>).self) { group -> [(SourceKind, Result<[PhotoCandidate], Error>)] in
                 for kind in kinds {
                     let query = queries.randomElement() ?? col.name
                     let page = attempt == 0 ? Int.random(in: 1...3) : 1
                     group.addTask {
                         do {
-                            return .success(try await Providers.provider(for: kind).search(query: query, collection: col, page: page))
+                            return (kind, .success(try await Providers.provider(for: kind).search(query: query, collection: col, page: page)))
                         } catch {
-                            return .failure(error)
+                            return (kind, .failure(error))
                         }
                     }
                 }
-                var out: [Result<[PhotoCandidate], Error>] = []
+                var out: [(SourceKind, Result<[PhotoCandidate], Error>)] = []
                 for await r in group { out.append(r) }
                 return out
             }
             let existing = Set((pools[colID] ?? []).map(\.id))
             var seenNow = Set<String>()
-            for r in results {
+            for (kind, r) in results {
                 switch r {
                 case .success(let list):
+                    ConnectionTester.shared.recordSuccess(kind)
                     for c in list where !seenNow.contains(c.id) && !existing.contains(c.id) {
                         seenNow.insert(c.id)
                         if store.hasSeen(c.id, in: colID) || store.isLiked(c.id, in: colID) { continue }
@@ -289,7 +290,8 @@ final class InspirationEngine: ObservableObject {
                         fresh.append(c)
                     }
                 case .failure(let e):
-                    errors.append(e.localizedDescription)
+                    ConnectionTester.shared.recordFailure(kind, e)
+                    errors.append("\(kind.shortName): " + ConnectionTester.describe(e, kind))
                 }
             }
         }
