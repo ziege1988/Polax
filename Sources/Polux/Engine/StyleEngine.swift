@@ -74,17 +74,16 @@ enum StyleEngine {
         )
         let excluded = c.excludedWords.map(normalizeTag)
         let minCount = c.likes.count >= 4 ? 2 : 1
-        let learned = counts
-            .filter { term, count in
-                count >= minCount
-                    && (weights[term] ?? 0) > 0
-                    && !baseWords.contains(term)
-                    && !excluded.contains(where: { term.contains($0) })
-            }
-            .map { (term: $0.key, w: weights[$0.key] ?? 0) }
-            .sorted { $0.w == $1.w ? $0.term < $1.term : $0.w > $1.w }
-            .prefix(6)
-            .map(\.term)
+        var scored: [(term: String, w: Double)] = []
+        for (term, count) in counts {
+            guard count >= minCount, !baseWords.contains(term) else { continue }
+            let w: Double = weights[term] ?? 0
+            guard w > 0 else { continue }
+            if excluded.contains(where: { term.contains($0) }) { continue }
+            scored.append((term: term, w: w))
+        }
+        scored.sort { a, b in a.w == b.w ? a.term < b.term : a.w > b.w }
+        let learned: [String] = scored.prefix(6).map { $0.term }
         return (weights, learned)
     }
 
