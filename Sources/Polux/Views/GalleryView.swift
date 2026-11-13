@@ -114,7 +114,15 @@ struct GalleryView: View {
                     selecting = true
                 } label: {
                     Label("Moodboard erstellen", systemImage: "square.grid.3x2")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(Color.black))
+                        .contentShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .help("Fotos auswählen und als Moodboard-Bild exportieren")
             }
         }
         .padding(.horizontal, 24)
