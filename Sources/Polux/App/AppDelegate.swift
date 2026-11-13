@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             .sink { [weak self] state in
                 guard let item = self?.updateItem else { return }
                 if case .available(let v, _) = state {
-                    item.title = "Update auf \(v) verfügbar …"
+                    item.title = "Auf Version \(v) aktualisieren"
                 } else {
                     item.title = "Nach Updates suchen …"
                 }
@@ -222,8 +222,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
     @objc private func menuGallery() { showGallery(store.currentCollectionID) }
     @objc private func menuSettings() { showSettings(.collections) }
     @objc private func menuUpdates() {
+        if case .available = updater.state {
+            Task { await updater.install() }
+            return
+        }
         showSettings(.updates)
-        if updater.availableVersion == nil { Task { await updater.check() } }
+        if !updater.isBusy { Task { await updater.check() } }
     }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 }

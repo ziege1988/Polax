@@ -348,7 +348,7 @@ struct UpdatesSettingsView: View {
                 Toggle("Automatisch einmal täglich prüfen", isOn: $settings.autoCheckUpdates)
                 HStack {
                     Button("Jetzt nach Updates suchen") { Task { await updater.check() } }
-                        .disabled(updater.state == .checking)
+                        .disabled(updater.isBusy)
                     if updater.state == .checking { ProgressView().controlSize(.small) }
                 }
                 statusView
@@ -369,13 +369,27 @@ struct UpdatesSettingsView: View {
             Label("Polux ist auf dem neuesten Stand.", systemImage: "checkmark.seal")
                 .foregroundColor(.green)
         case .available(let version, let url):
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Label("Version \(version) ist verfügbar.", systemImage: "arrow.down.circle.fill")
                     .foregroundColor(.orange)
-                Button("Herunterladen") { NSWorkspace.shared.open(url) }
-                Text("Nach dem Download die neue Polux.app in den Programme-Ordner ziehen und die alte ersetzen.")
+                HStack {
+                    Button("Jetzt aktualisieren") { Task { await updater.install() } }
+                        .buttonStyle(.borderedProminent)
+                    Button("Was ist neu?") { NSWorkspace.shared.open(url) }
+                }
+                Text("Polux lädt die neue Version, ersetzt sich selbst und startet automatisch neu. Sammlungen, Likes und Einstellungen bleiben erhalten.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+        case .downloading(let version):
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Lade Version \(version) …")
+            }
+        case .installing(let version):
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Installiere Version \(version) – Polux startet gleich neu …")
             }
         case .failed(let message):
             Label(message, systemImage: "exclamationmark.triangle")
