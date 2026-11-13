@@ -44,7 +44,8 @@ final class PolaroidWindow: NSWindow {
         let p = event.locationInWindow
         let flipped = CGPoint(x: p.x, y: content.bounds.height - p.y)
 
-        if event.clickCount >= 2, DragRegion.shared.rect.contains(flipped) {
+        let photo = PolaroidView.photoRect(for: AppSettings.shared.polaroidSize)
+        if event.clickCount >= 2, photo.contains(flipped) || DragRegion.shared.rect.contains(flipped) {
             onDoubleClick?()
             return
         }

@@ -25,6 +25,15 @@ struct PolaroidView: View {
     /// Außenabstand für den Schatten.
     static let shadowMargin: CGFloat = 26
 
+    /// Lage des Fotos im Fenster (Ursprung oben links) – rein rechnerisch aus der Polaroid-Größe.
+    static func photoRect(for size: PolaroidSize) -> CGRect {
+        let w = size.width
+        let pad = (w * 0.045).rounded()
+        let imageW = w - pad * 2
+        let imageH = (imageW * 1.25).rounded()
+        return CGRect(x: shadowMargin + pad, y: shadowMargin + pad, width: imageW, height: imageH)
+    }
+
     var body: some View {
         let w = settings.polaroidSize.width
         let pad = (w * 0.045).rounded()
@@ -115,6 +124,8 @@ struct PolaroidView: View {
             }
         )
         .onPreferenceChange(PhotoFrameKey.self) { DragRegion.shared.rect = $0 }
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { Router.shared.openGallery(store.currentCollectionID) }
         .help("Ziehen zum Verschieben · Doppelklick öffnet die Galerie")
         .accessibilityLabel(engine.current?.candidate.title ?? "Inspirationsfoto")
     }

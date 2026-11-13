@@ -1,6 +1,9 @@
-## Polux 1.0.2
+## Polux 1.0.3
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.3**
+- Doppelklick auf das Foto öffnet zuverlässig die Galerie.
 
 **Neu in 1.0.2**
 - **Updates mit einem Klick:** „Jetzt aktualisieren“ lädt die neue Version, ersetzt Polux und startet automatisch neu. Sammlungen, Likes und Einstellungen bleiben erhalten. Findet die tägliche Prüfung eine neue Version, fragt Polux einmal nach.
@@ -9,10 +12,10 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Neu in 1.0.1**
 - Das Polaroid lässt sich an jeder Stelle verschieben – Rahmen, Ecken, Foto und Beschriftung.
 
-**Einmalig für 1.0.2:** Ältere Versionen haben den neuen Updater noch nicht – 1.0.2 bitte noch einmal von Hand installieren (alte App ersetzen). Ab dann geht jedes Update automatisch.
+**Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.2.zip` herunterladen und entpacken.
+1. `Polux-1.0.3.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.
