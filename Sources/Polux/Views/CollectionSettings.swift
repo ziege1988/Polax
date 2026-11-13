@@ -68,7 +68,7 @@ private struct CollectionSearchTab: View {
 
     var body: some View {
         Form {
-            Section("Name") {
+            Section("Allgemein") {
                 TextField("Name", text: $collection.name)
             }
             Section {

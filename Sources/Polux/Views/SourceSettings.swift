@@ -197,7 +197,7 @@ struct SourceCard: View {
 
     private var buttonTitle: String {
         if kind == .rss { return "Anleitung" }
-        if kind.needsCredentials && !Providers.hasCredentials(kind) { return "Einrichten …" }
+        if tester.status(kind) == .missing { return "Einrichten …" }
         return "Details"
     }
 }
