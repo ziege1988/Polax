@@ -60,20 +60,25 @@ enum PreviewRenderer {
             .deviantart: .unknown
         ]
         let nav = SettingsNavigation.shared
-        let pages: [(SettingsPage, String)] = [
-            (.sourcesOverview, "settings-sources"),
-            (.source(.unsplash), "settings-source-detail"),
-            (.collection(colID), "settings-collection")
+        let pages: [(SettingsPage, CollectionTab, String)] = [
+            (.sources, .search, "settings-sources"),
+            (.collection(colID), .search, "settings-collection"),
+            (.collection(colID), .sources, "settings-collection-sources")
         ]
-        for (page, name) in pages {
+        for (page, tab, name) in pages {
+            nav.collectionTab = tab
             nav.page = page
             let view = SettingsView()
                 .environmentObject(store)
                 .environmentObject(engine)
                 .environmentObject(settings)
                 .environmentObject(updater)
-            snapshotWindow(view, size: NSSize(width: 940, height: 760), to: dir.appendingPathComponent("\(name).png"))
+            snapshotWindow(view, size: NSSize(width: 960, height: 760), to: dir.appendingPathComponent("\(name).png"))
         }
+        let sheet = SourceSetupSheet(kind: .unsplash)
+            .environmentObject(store)
+            .environmentObject(engine)
+        snapshotWindow(sheet, size: NSSize(width: 600, height: 640), to: dir.appendingPathComponent("settings-source-detail.png"))
         store.saveNow()
     }
 

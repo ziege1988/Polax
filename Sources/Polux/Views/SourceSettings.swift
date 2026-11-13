@@ -40,7 +40,7 @@ struct SourceInfo {
                 steps: [
                     "Das gewünschte **öffentliche** Board auf pinterest.com im Browser öffnen.",
                     "Die Adresse aus der Adresszeile kopieren, z. B. https://www.pinterest.com/nutzer/boardname/",
-                    "Unten bei der passenden Sammlung auf „Bearbeiten“ klicken und die Adresse unter „Pinterest-Boards & RSS-Feeds“ einfügen.",
+                    "Unten bei der passenden Sammlung auf „Boards bearbeiten“ klicken und die Adresse einfügen.",
                     "Mit „Testen“ prüfen, ob Bilder gefunden werden."
                 ],
                 link: "https://www.pinterest.com", linkTitle: "pinterest.com öffnen", note: nil)
@@ -91,71 +91,167 @@ struct SourceInfo {
     }
 }
 
-// MARK: - Übersicht
+// MARK: - Übersicht „Zugänge & Quellen“
+
+extension SourceKind {
+    /// Kurzbeschreibung für die Kachel.
+    var tagline: String {
+        switch self {
+        case .openverse: return "Flickr CC, Wikimedia & Museen · Akt möglich"
+        case .artstation: return "Digitale Kunst & Concept Art"
+        case .rss: return "Eigene öffentliche Boards je Sammlung"
+        case .unsplash: return "Kuratierte Fotografie · kaum Akt"
+        case .flickr: return "Riesiges Fotoarchiv"
+        case .pexels: return "Stockfotos · keine Akte"
+        case .deviantart: return "Kunst & Fotografie · düster, Akt"
+        }
+    }
+}
 
 struct SourcesOverviewView: View {
     @ObservedObject private var tester = ConnectionTester.shared
+    @EnvironmentObject var store: LibraryStore
     @State private var testingAll = false
 
+    private let columns = [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)]
+
     var body: some View {
-        Form {
-            Section {
-                PageHeader(icon: "list.bullet.rectangle", title: "Bildquellen",
-                           subtitle: "Openverse und ArtStation funktionieren sofort. Für weitere Quellen trägst du einmalig einen kostenlosen Schlüssel ein – Schlüssel werden im macOS-Schlüsselbund gespeichert.")
-            }
-            Section("Ohne Anmeldung") {
-                ForEach([SourceKind.openverse, .artstation]) { row($0) }
-                pinterestRow
-            }
-            Section("Mit kostenlosem Schlüssel") {
-                ForEach([SourceKind.unsplash, .flickr, .pexels, .deviantart]) { row($0) }
-            }
-            Section {
-                HStack {
-                    Button("Alle Verbindungen testen") {
-                        testingAll = true
-                        Task { @MainActor in
-                            for k in SourceKind.menuOrder where k != .rss && Providers.hasCredentials(k) {
-                                await tester.test(k)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                HStack(alignment: .top) {
+                    PageHeader(icon: "key.horizontal", title: "Zugänge & Quellen",
+                               subtitle: "Woher Polux die Fotos holt. Quellen ohne Anmeldung laufen sofort – für die anderen trägst du einmalig einen kostenlosen Schlüssel ein.")
+                    Spacer(minLength: 12)
+                    VStack(alignment: .trailing, spacing: 6) {
+                        Button {
+                            testingAll = true
+                            Task { @MainActor in
+                                for k in SourceKind.menuOrder where k != .rss && Providers.hasCredentials(k) {
+                                    await tester.test(k)
+                                }
+                                testingAll = false
                             }
-                            testingAll = false
+                        } label: {
+                            Label("Alle testen", systemImage: "arrow.triangle.2.circlepath")
                         }
+                        .disabled(testingAll)
+                        if testingAll { ProgressView().controlSize(.small) }
                     }
-                    .disabled(testingAll)
-                    if testingAll { ProgressView().controlSize(.small) }
                 }
-            } footer: {
-                Text("Behance bietet keine öffentliche Schnittstelle mehr und kann daher nicht eingebunden werden.")
-                    .font(.caption).foregroundColor(.secondary)
+
+                group("Sofort nutzbar – ohne Anmeldung", [.openverse, .artstation, .rss])
+                group("Mit kostenlosem Zugang", [.unsplash, .flickr, .pexels, .deviantart])
+
+                Text("Behance bietet keine öffentliche Schnittstelle mehr und kann daher nicht eingebunden werden. Welche Quelle eine Sammlung nutzt, stellst du in der Sammlung unter „Quellen“ ein.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(24)
+        }
+    }
+
+    private func group(_ title: String, _ kinds: [SourceKind]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .kerning(0.8)
+                .foregroundColor(.secondary)
+            LazyVGrid(columns: columns, spacing: 14) {
+                ForEach(kinds) { SourceCard(kind: $0) }
             }
         }
-        .formStyle(.grouped)
+    }
+}
+
+/// Kachel einer Bildquelle mit Status und „Einrichten“.
+struct SourceCard: View {
+    let kind: SourceKind
+    @ObservedObject private var tester = ConnectionTester.shared
+    @EnvironmentObject var store: LibraryStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: kind.icon)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white)
+                    .frame(width: 32, height: 32)
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(kind.title).font(.headline)
+                    Text(kind.tagline).font(.caption).foregroundColor(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 4)
+            }
+            HStack {
+                StatusPill(kind: kind)
+                Spacer()
+                Button(buttonTitle) { SettingsNavigation.shared.setUp(kind) }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.primary.opacity(0.04)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.primary.opacity(0.08)))
     }
 
-    private func row(_ kind: SourceKind) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: kind.icon).frame(width: 20).foregroundColor(.secondary)
-            ConnectionRow(kind: kind, title: kind.title)
-            Button {
-                SettingsNavigation.shared.page = .source(kind)
-            } label: { Image(systemName: "chevron.right") }
-            .buttonStyle(.borderless)
-            .help("Einrichten")
-        }
+    private var buttonTitle: String {
+        if kind == .rss { return "Anleitung" }
+        if kind.needsCredentials && !Providers.hasCredentials(kind) { return "Einrichten …" }
+        return "Details"
+    }
+}
+
+/// Kompakte Statusanzeige als Kapsel.
+struct StatusPill: View {
+    let kind: SourceKind
+    @ObservedObject private var tester = ConnectionTester.shared
+    @EnvironmentObject var store: LibraryStore
+
+    var body: some View {
+        let (text, color, icon) = describe()
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.medium))
+            .foregroundColor(color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(color.opacity(0.12)))
+            .lineLimit(1)
     }
 
-    private var pinterestRow: some View {
-        HStack(spacing: 10) {
-            Image(systemName: SourceKind.rss.icon).frame(width: 20).foregroundColor(.secondary)
-            Text(SourceKind.rss.title).frame(minWidth: 90, alignment: .leading)
-            Text("Boards werden pro Sammlung eingetragen")
-                .font(.callout).foregroundColor(.secondary)
-            Spacer()
-            Button {
-                SettingsNavigation.shared.page = .source(.rss)
-            } label: { Image(systemName: "chevron.right") }
-            .buttonStyle(.borderless)
+    private func describe() -> (String, Color, String) {
+        if kind == .rss {
+            let boards = store.collections.reduce(0) { $0 + $1.feeds.count }
+            return boards == 0 ? ("Keine Boards", .secondary, "pin.slash")
+                               : ("\(boards) Board\(boards == 1 ? "" : "s")", .green, "pin.fill")
         }
+        switch tester.status(kind) {
+        case .ok: return ("Verbunden", .green, "checkmark.circle.fill")
+        case .failed: return ("Fehler", .red, "exclamationmark.triangle.fill")
+        case .missing: return ("Schlüssel fehlt", .orange, "key")
+        case .testing: return ("Teste …", .secondary, "circle.dotted")
+        case .unknown: return (kind.needsCredentials ? "Eingerichtet" : "Bereit", .secondary, "circle")
+        }
+    }
+}
+
+/// Fenster zum Einrichten einer Quelle (Schlüssel, Test, Anleitung).
+struct SourceSetupSheet: View {
+    let kind: SourceKind
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SourceDetailView(kind: kind)
+            Divider()
+            HStack {
+                Spacer()
+                Button("Fertig") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(14)
+        }
+        .frame(width: 600, height: 640)
     }
 }
 
@@ -200,7 +296,10 @@ struct SourceDetailView: View {
                             Spacer()
                             Text(c.feeds.isEmpty ? "keine Boards" : "\(c.feeds.count) Board\(c.feeds.count == 1 ? "" : "s")")
                                 .foregroundColor(.secondary)
-                            Button("Bearbeiten") { SettingsNavigation.shared.page = .collection(c.id) }
+                            Button("Boards bearbeiten") {
+                                SettingsNavigation.shared.setupSource = nil
+                                SettingsNavigation.shared.openCollection(c.id, tab: .sources)
+                            }
                         }
                     }
                 }
@@ -383,7 +482,7 @@ struct SourceStatusBadge: View {
             Image(systemName: "checkmark.circle.fill").foregroundColor(.green).help("Verbunden")
         case .failed(let m):
             Button {
-                SettingsNavigation.shared.page = .source(kind)
+                SettingsNavigation.shared.setUp(kind)
             } label: {
                 Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
             }

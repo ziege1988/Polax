@@ -1,14 +1,13 @@
 import SwiftUI
 import AppKit
 
-// MARK: - Sammlung bearbeiten
+// MARK: - Sammlung bearbeiten (Reiter: Suche · Quellen · Stil & Fotos)
 
 struct CollectionEditor: View {
     let collectionID: UUID
     @EnvironmentObject var store: LibraryStore
     @EnvironmentObject var engine: InspirationEngine
-    @State private var newFeed = ""
-    @State private var confirmDelete = false
+    @ObservedObject private var nav = SettingsNavigation.shared
 
     private var binding: Binding<PhotoCollection> {
         Binding(
@@ -18,34 +17,79 @@ struct CollectionEditor: View {
     }
 
     var body: some View {
-        let c = binding
-        let learned = StyleEngine.termProfile(for: c.wrappedValue).learned
-
-        Form {
-            Section {
-                PageHeader(icon: "rectangle.stack", title: c.wrappedValue.name.isEmpty ? "Sammlung" : c.wrappedValue.name,
-                           subtitle: "\(c.wrappedValue.likes.count) Lieblingsfotos · \(Paths.formatBytes(Int64(c.wrappedValue.totalBytes)))")
-            }
-
-            Section("Allgemein") {
-                TextField("Name", text: c.name)
-                HStack {
+        let c = binding.wrappedValue
+        VStack(spacing: 0) {
+            // Kopf mit Name, Kennzahlen und Schnellaktionen
+            HStack(alignment: .center, spacing: 12) {
+                PageHeader(icon: "rectangle.stack", title: c.name.isEmpty ? "Sammlung" : c.name,
+                           subtitle: "\(c.likes.count) Lieblingsfotos · \(Paths.formatBytes(Int64(c.totalBytes))) · \(c.keywords.count) Schlagwörter")
+                Spacer(minLength: 8)
+                if store.currentCollectionID == collectionID {
+                    Label("Im Polaroid", systemImage: "eye")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } else {
                     Button("Im Polaroid anzeigen") { engine.switchCollection(to: collectionID) }
-                        .disabled(store.currentCollectionID == collectionID)
-                    Button("Galerie öffnen") { Router.shared.openGallery(collectionID) }
+                }
+                Button {
+                    Router.shared.openGallery(collectionID)
+                } label: {
+                    Label("Galerie", systemImage: "square.grid.2x2")
                 }
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 20)
+            .padding(.bottom, 12)
 
-            Section("Wonach suchen?") {
-                TokenEditor(title: "Schlagwörter (Englisch liefert die meisten Treffer)",
-                            tokens: c.keywords,
+            Picker("", selection: $nav.collectionTab) {
+                ForEach(CollectionTab.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 420)
+            .padding(.bottom, 4)
+
+            Group {
+                switch nav.collectionTab {
+                case .search: CollectionSearchTab(collection: binding)
+                case .sources: CollectionSourcesTab(collection: binding)
+                case .style: CollectionStyleTab(collection: binding, collectionID: collectionID)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+// MARK: Reiter „Suche“
+
+private struct CollectionSearchTab: View {
+    @Binding var collection: PhotoCollection
+
+    var body: some View {
+        Form {
+            Section("Name") {
+                TextField("Name", text: $collection.name)
+            }
+            Section {
+                TokenEditor(title: "Schlagwörter",
+                            tokens: $collection.keywords,
                             placeholder: "z. B. low key portrait, Enter zum Hinzufügen")
-                TokenEditor(title: "Ausschließen",
-                            tokens: c.excludedWords,
+            } header: {
+                Text("Wonach suchen?")
+            } footer: {
+                Text("Englische Begriffe liefern die meisten Treffer. Polux kombiniert sie zufällig und ergänzt gelernte Stilbegriffe aus deinen Likes.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+            Section("Was ausschließen?") {
+                TokenEditor(title: "Ausschlusswörter",
+                            tokens: $collection.excludedWords,
                             placeholder: "z. B. wedding, selfie")
-                Toggle("Aktfotografie & Mature-Inhalte zulassen", isOn: c.allowNudity)
+            }
+            Section("Bildsprache") {
+                Toggle("Aktfotografie & Mature-Inhalte zulassen", isOn: $collection.allowNudity)
                 VStack(alignment: .leading, spacing: 4) {
-                    Slider(value: c.darkBias, in: 0...1) {
+                    Slider(value: $collection.darkBias, in: 0...1) {
                         Text("Düstere Inszenierung")
                     } minimumValueLabel: {
                         Image(systemName: "sun.max")
@@ -56,47 +100,47 @@ struct CollectionEditor: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                Toggle("Nur Fotografien (keine Illustrationen)", isOn: c.photosOnly)
+                Toggle("Nur Fotografien (keine Illustrationen)", isOn: $collection.photosOnly)
             }
+        }
+        .formStyle(.grouped)
+    }
+}
 
-            Section("Quellen") {
-                ForEach(SourceKind.allCases) { kind in
-                    Toggle(isOn: Binding(
-                        get: { c.wrappedValue.sources.contains(kind) },
-                        set: { on in
-                            var v = c.wrappedValue
-                            if on { v.sources.insert(kind) } else { v.sources.remove(kind) }
-                            c.wrappedValue = v
-                        }
-                    )) {
-                        HStack {
-                            Text(kind.displayName)
-                            SourceStatusBadge(kind: kind)
-                            if kind.needsCredentials && ConnectionTester.shared.status(kind) == .missing {
-                                Button("Schlüssel fehlt") { SettingsNavigation.shared.page = .source(kind) }
-                                    .buttonStyle(.link)
-                                    .font(.caption)
-                            }
-                            if kind == .rss && c.wrappedValue.feeds.isEmpty {
-                                Text("Feed unten eintragen").font(.caption).foregroundColor(.secondary)
-                            }
-                        }
-                    }
+// MARK: Reiter „Quellen“
+
+private struct CollectionSourcesTab: View {
+    @Binding var collection: PhotoCollection
+    @ObservedObject private var tester = ConnectionTester.shared
+    @State private var newFeed = ""
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(SourceKind.menuOrder.filter { $0 != .rss }) { kind in
+                    sourceRow(kind)
                 }
+            } header: {
+                Text("Bildquellen dieser Sammlung")
+            } footer: {
+                Text("Schlüssel gelten für alle Sammlungen und werden unter „Zugänge & Quellen“ verwaltet.")
+                    .font(.caption).foregroundColor(.secondary)
             }
 
             Section {
-                ForEach(c.wrappedValue.feeds, id: \.self) { feed in
+                Toggle(isOn: sourceBinding(.rss)) {
+                    Label("Pinterest-Boards & RSS-Feeds verwenden", systemImage: SourceKind.rss.icon)
+                }
+                ForEach(collection.feeds, id: \.self) { feed in
                     HStack {
                         Text(feed).lineLimit(1).truncationMode(.middle)
                         Spacer()
                         FeedTestButton(feed: feed)
                         Button {
-                            var v = c.wrappedValue
-                            v.feeds.removeAll { $0 == feed }
-                            c.wrappedValue = v
+                            collection.feeds.removeAll { $0 == feed }
                         } label: { Image(systemName: "minus.circle") }
                         .buttonStyle(.borderless)
+                        .help("Board entfernen")
                     }
                 }
                 HStack {
@@ -106,14 +150,76 @@ struct CollectionEditor: View {
                         .disabled(newFeed.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             } header: {
-                Text("Pinterest-Boards & RSS-Feeds")
+                Text("Pinterest-Boards")
             } footer: {
-                Text("Öffentliche Pinterest-Boards werden über ihren RSS-Feed eingebunden. Auch andere Bild-Feeds (z. B. Tumblr, Flickr-Gruppen) funktionieren.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Text("Nur öffentliche Boards. Auch andere Bild-Feeds (Tumblr, Flickr-Gruppen) funktionieren.")
+                    Button("Anleitung") { SettingsNavigation.shared.setUp(.rss) }
+                        .buttonStyle(.link)
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
             }
+        }
+        .formStyle(.grouped)
+    }
 
-            Section("Gelernter Stil") {
+    private func sourceRow(_ kind: SourceKind) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: kind.icon).frame(width: 20).foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(kind.title)
+                Text(kind.tagline).font(.caption).foregroundColor(.secondary)
+            }
+            Spacer()
+            StatusPill(kind: kind)
+            if tester.status(kind) == .missing || isFailed(kind) {
+                Button(tester.status(kind) == .missing ? "Einrichten …" : "Prüfen …") {
+                    SettingsNavigation.shared.setUp(kind)
+                }
+            }
+            Toggle("", isOn: sourceBinding(kind))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+        }
+    }
+
+    private func isFailed(_ kind: SourceKind) -> Bool {
+        if case .failed = tester.status(kind) { return true }
+        return false
+    }
+
+    private func sourceBinding(_ kind: SourceKind) -> Binding<Bool> {
+        Binding(
+            get: { collection.sources.contains(kind) },
+            set: { on in
+                if on { collection.sources.insert(kind) } else { collection.sources.remove(kind) }
+            }
+        )
+    }
+
+    private func addFeed() {
+        let f = newFeed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !f.isEmpty, RSSProvider.normalizedFeedURL(f) != nil else { return }
+        if !collection.feeds.contains(f) { collection.feeds.append(f) }
+        collection.sources.insert(.rss)
+        newFeed = ""
+    }
+}
+
+// MARK: Reiter „Stil & Fotos“
+
+private struct CollectionStyleTab: View {
+    @Binding var collection: PhotoCollection
+    let collectionID: UUID
+    @EnvironmentObject var store: LibraryStore
+    @State private var confirmDelete = false
+
+    var body: some View {
+        let learned = StyleEngine.termProfile(for: collection).learned
+        Form {
+            Section {
                 if learned.isEmpty {
                     Text("Noch nichts gelernt – like Fotos im Polaroid, dann erweitert Polux die Suche automatisch um passende Stilbegriffe.")
                         .foregroundColor(.secondary)
@@ -122,12 +228,28 @@ struct CollectionEditor: View {
                         ForEach(learned, id: \.self) { Chip(text: $0) }
                     }
                 }
-                LabeledContent("Lieblingsfotos",
-                               value: "\(c.wrappedValue.likes.count) · \(Paths.formatBytes(Int64(c.wrappedValue.totalBytes)))")
-                LabeledContent("Aus der Galerie entfernt (Negativ-Signale)",
-                               value: "\(c.wrappedValue.rejectedPrints.count)")
+            } header: {
+                Text("Gelernter Stil")
+            } footer: {
+                Text("Abgeleitet aus Motiv, Tags, Helligkeit und visueller Ähnlichkeit deiner Lieblingsfotos – komplett auf deinem Mac.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+
+            Section("Lieblingsfotos") {
+                LabeledContent("Anzahl", value: "\(collection.likes.count)")
+                LabeledContent("Speicher", value: Paths.formatBytes(Int64(collection.totalBytes)))
+                Button("Galerie öffnen") { Router.shared.openGallery(collectionID) }
+            }
+
+            Section {
+                LabeledContent("Aus der Galerie entfernte Fotos", value: "\(collection.rejectedPrints.count)")
                 Button("Negativ-Signale zurücksetzen") { store.resetRejections(collectionID) }
-                    .disabled(c.wrappedValue.rejectedTags.isEmpty && c.wrappedValue.rejectedPrints.isEmpty)
+                    .disabled(collection.rejectedTags.isEmpty && collection.rejectedPrints.isEmpty)
+            } header: {
+                Text("Nicht gewünscht")
+            } footer: {
+                Text("Entfernte Fotos drücken ähnliche Vorschläge nach hinten.")
+                    .font(.caption).foregroundColor(.secondary)
             }
 
             Section {
@@ -143,22 +265,11 @@ struct CollectionEditor: View {
         .alert("Sammlung löschen?", isPresented: $confirmDelete) {
             Button("Löschen", role: .destructive) {
                 store.deleteCollection(collectionID)
-                SettingsNavigation.shared.page = .collection(store.currentCollectionID)
+                SettingsNavigation.shared.openCollection(store.currentCollectionID, tab: .search)
             }
             Button("Abbrechen", role: .cancel) {}
         } message: {
-            Text("„\(c.wrappedValue.name)“ und alle gelikten Fotos darin werden entfernt.")
+            Text("„\(collection.name)“ und alle gelikten Fotos darin werden entfernt.")
         }
     }
-
-    private func addFeed() {
-        let f = newFeed.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !f.isEmpty, RSSProvider.normalizedFeedURL(f) != nil else { return }
-        var v = binding.wrappedValue
-        if !v.feeds.contains(f) { v.feeds.append(f) }
-        v.sources.insert(.rss)
-        binding.wrappedValue = v
-        newFeed = ""
-    }
 }
-

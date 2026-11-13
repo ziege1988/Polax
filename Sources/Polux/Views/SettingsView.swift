@@ -4,25 +4,48 @@ import AppKit
 /// Menüpunkte der Einstellungen.
 enum SettingsPage: Hashable {
     case collection(UUID)
-    case sourcesOverview
-    case source(SourceKind)
+    case sources
     case playback
     case widget
     case storage
     case updates
 }
 
+/// Reiter innerhalb einer Sammlung.
+enum CollectionTab: String, CaseIterable, Identifiable {
+    case search, sources, style
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .search: return "Suche"
+        case .sources: return "Quellen"
+        case .style: return "Stil & Fotos"
+        }
+    }
+}
+
 final class SettingsNavigation: ObservableObject {
     static let shared = SettingsNavigation()
-    @Published var page: SettingsPage? = .playback
+    @Published var page: SettingsPage? = .sources
+    @Published var collectionTab: CollectionTab = .search
+    /// Quelle, deren Einrichtungs-Fenster gerade offen ist.
+    @Published var setupSource: SourceKind?
+    @Published var showNewCollection = false
 
     func open(_ tab: SettingsTab, currentCollection: UUID) {
         switch tab {
         case .collections: page = .collection(currentCollection)
-        case .sources: page = .sourcesOverview
+        case .sources: page = .sources
         case .general: page = .playback
         case .updates: page = .updates
         }
+    }
+
+    func setUp(_ kind: SourceKind) { setupSource = kind }
+
+    func openCollection(_ id: UUID, tab: CollectionTab) {
+        collectionTab = tab
+        page = .collection(id)
     }
 }
 
@@ -59,6 +82,7 @@ extension SourceKind {
 
 struct SettingsView: View {
     @ObservedObject var nav = SettingsNavigation.shared
+    @ObservedObject private var tester = ConnectionTester.shared
     @EnvironmentObject var store: LibraryStore
     @EnvironmentObject var updater: UpdateChecker
 
@@ -71,7 +95,15 @@ struct SettingsView: View {
                 .id(nav.page)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 860, minHeight: 600)
+        .frame(minWidth: 880, minHeight: 620)
+        .sheet(item: $nav.setupSource) { kind in
+            SourceSetupSheet(kind: kind)
+                .environmentObject(store)
+        }
+        .sheet(isPresented: $nav.showNewCollection) {
+            NewCollectionSheet()
+                .environmentObject(store)
+        }
     }
 
     private var sidebar: some View {
@@ -98,29 +130,24 @@ struct SettingsView: View {
                 .onMove { store.moveCollections(from: $0, to: $1) }
 
                 Button {
-                    let id = store.addCollection(name: "Neue Sammlung")
-                    nav.page = .collection(id)
+                    nav.showNewCollection = true
                 } label: {
-                    Label("Neue Sammlung", systemImage: "plus")
+                    Label("Neue Sammlung …", systemImage: "plus")
                         .foregroundColor(.accentColor)
                 }
                 .buttonStyle(.plain)
             }
 
             Section("Bildquellen") {
-                Label("Übersicht", systemImage: "list.bullet.rectangle")
-                    .tag(SettingsPage.sourcesOverview)
-                ForEach(SourceKind.menuOrder) { kind in
-                    HStack {
-                        Label(kind.title, systemImage: kind.icon)
-                        Spacer()
-                        StatusDot(kind: kind)
-                    }
-                    .tag(SettingsPage.source(kind))
+                HStack {
+                    Label("Zugänge & Quellen", systemImage: "key.horizontal")
+                    Spacer()
+                    sourcesBadge
                 }
+                .tag(SettingsPage.sources)
             }
 
-            Section("App") {
+            Section("Allgemein") {
                 Label("Wiedergabe", systemImage: "play.circle")
                     .tag(SettingsPage.playback)
                 Label("Widget & Start", systemImage: "rectangle.on.rectangle")
@@ -140,15 +167,29 @@ struct SettingsView: View {
         .listStyle(.sidebar)
     }
 
+    /// Zusammenfassung: Anzahl verbundener Quellen bzw. roter Punkt bei Fehlern.
+    @ViewBuilder
+    private var sourcesBadge: some View {
+        let kinds = SourceKind.menuOrder.filter { $0 != .rss }
+        let failed = kinds.contains { if case .failed = tester.status($0) { return true } else { return false } }
+        let ready = kinds.filter { Providers.hasCredentials($0) }.count
+        if failed {
+            Circle().fill(Color.red).frame(width: 7, height: 7).help("Mindestens eine Quelle meldet einen Fehler")
+        } else {
+            Text("\(ready)/\(kinds.count)")
+                .font(.caption.monospacedDigit())
+                .foregroundColor(.secondary)
+                .help("Eingerichtete Quellen")
+        }
+    }
+
     @ViewBuilder
     private var detail: some View {
         switch nav.page {
         case .collection(let id) where store.collection(id) != nil:
             CollectionEditor(collectionID: id)
-        case .sourcesOverview:
+        case .sources:
             SourcesOverviewView()
-        case .source(let kind):
-            SourceDetailView(kind: kind)
         case .playback:
             PlaybackSettingsView()
         case .widget:
@@ -163,6 +204,63 @@ struct SettingsView: View {
                 Text("Links einen Menüpunkt wählen").foregroundColor(.secondary)
             }
         }
+    }
+}
+
+// MARK: - Neue Sammlung
+
+struct NewCollectionSheet: View {
+    @EnvironmentObject var store: LibraryStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var keywords: [String] = []
+    @State private var allowNudity = true
+    @State private var darkBias = 0.3
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PageHeader(icon: "rectangle.stack.badge.plus", title: "Neue Sammlung",
+                       subtitle: "Gib der Sammlung einen Namen und ein paar Suchbegriffe – den Rest lernt Polux aus deinen Likes.")
+                .padding(20)
+            Form {
+                TextField("Name", text: $name, prompt: Text("z. B. Film Noir"))
+                TokenEditor(title: "Schlagwörter (Englisch liefert die meisten Treffer)",
+                            tokens: $keywords,
+                            placeholder: "z. B. film noir portrait, Enter zum Hinzufügen")
+                Toggle("Aktfotografie & Mature-Inhalte zulassen", isOn: $allowNudity)
+                Slider(value: $darkBias, in: 0...1) {
+                    Text("Düstere Inszenierung")
+                } minimumValueLabel: {
+                    Image(systemName: "sun.max")
+                } maximumValueLabel: {
+                    Image(systemName: "moon.fill")
+                }
+            }
+            .formStyle(.grouped)
+            HStack {
+                Spacer()
+                Button("Abbrechen") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Sammlung anlegen") { create() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(16)
+        }
+        .frame(width: 540, height: 520)
+    }
+
+    private func create() {
+        let id = store.addCollection(name: name)
+        if var c = store.collection(id) {
+            if !keywords.isEmpty { c.keywords = keywords }
+            c.allowNudity = allowNudity
+            c.darkBias = darkBias
+            store.update(c)
+        }
+        SettingsNavigation.shared.openCollection(id, tab: .search)
+        dismiss()
     }
 }
 
