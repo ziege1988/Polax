@@ -33,20 +33,45 @@ final class PolaroidWindow: NSWindow {
         }
     }
 
-    /// Bildfläche: Ziehen verschiebt das Fenster, Doppelklick öffnet die Galerie.
+    /// Ziehen an jeder Stelle des Polaroids (Rahmen, Ecken, Foto, Beschriftung) verschiebt das Fenster.
+    /// Ein Klick ohne Bewegung wird normal an Knöpfe und Menüs weitergegeben.
+    /// Doppelklick auf das Foto öffnet die Galerie.
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown, let content = contentView {
-            let p = event.locationInWindow
-            let flipped = CGPoint(x: p.x, y: content.bounds.height - p.y)
-            if DragRegion.shared.rect.contains(flipped) {
-                if event.clickCount >= 2 {
-                    onDoubleClick?()
-                } else {
-                    performDrag(with: event)
-                }
-                return
+        guard event.type == .leftMouseDown, let content = contentView else {
+            super.sendEvent(event)
+            return
+        }
+        let p = event.locationInWindow
+        let flipped = CGPoint(x: p.x, y: content.bounds.height - p.y)
+
+        if event.clickCount >= 2, DragRegion.shared.rect.contains(flipped) {
+            onDoubleClick?()
+            return
+        }
+
+        // Klick oder Ziehen? Erst nach 3 pt Bewegung wird verschoben.
+        let startMouse = NSEvent.mouseLocation
+        let startOrigin = frame.origin
+        var dragging = false
+        var mouseUp: NSEvent?
+
+        while let next = nextEvent(matching: [.leftMouseDragged, .leftMouseUp],
+                                   until: .distantFuture, inMode: .eventTracking, dequeue: true) {
+            if next.type == .leftMouseUp {
+                mouseUp = next
+                break
+            }
+            let now = NSEvent.mouseLocation
+            let dx = now.x - startMouse.x, dy = now.y - startMouse.y
+            if !dragging && (dx * dx + dy * dy) > 9 { dragging = true }
+            if dragging {
+                setFrameOrigin(NSPoint(x: startOrigin.x + dx, y: startOrigin.y + dy))
             }
         }
+
+        guard !dragging else { return }
+        // Normaler Klick: Loslassen zurück in die Warteschlange, dann Klick weitergeben.
+        if let up = mouseUp { postEvent(up, atStart: true) }
         super.sendEvent(event)
     }
 }
