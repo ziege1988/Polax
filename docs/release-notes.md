@@ -1,6 +1,9 @@
-## Polux 1.0.4
+## Polux 1.0.5
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.5**
+- Neue Einstellung je Sammlung: **Person im Bild – Beliebig · Frau · Mann · Paar**. Polux ergänzt die Suche passend und sortiert Fotos aus, die laut Titel/Tags eindeutig nicht passen. Auch beim Anlegen einer neuen Sammlung wählbar.
 
 **Neu in 1.0.4**
 - Einstellungen neu gegliedert: Seitenleiste mit *Sammlungen*, *Bildquellen* und *Allgemein*.
@@ -21,7 +24,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.4.zip` herunterladen und entpacken.
+1. `Polux-1.0.5.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

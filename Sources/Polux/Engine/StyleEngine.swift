@@ -72,11 +72,12 @@ enum StyleEngine {
         let baseWords = Set(
             (c.keywords + [c.name]).flatMap { normalizeTag($0).split(separator: " ").map(String.init) }
         )
+        let subjectWords = SubjectFocus.female.positiveWords.union(SubjectFocus.male.positiveWords).union(SubjectFocus.couple.positiveWords)
         let excluded = c.excludedWords.map(normalizeTag)
         let minCount = c.likes.count >= 4 ? 2 : 1
         var scored: [(term: String, w: Double)] = []
         for (term, count) in counts {
-            guard count >= minCount, !baseWords.contains(term) else { continue }
+            guard count >= minCount, !baseWords.contains(term), !subjectWords.contains(term) else { continue }
             let w: Double = weights[term] ?? 0
             guard w > 0 else { continue }
             if excluded.contains(where: { term.contains($0) }) { continue }
@@ -112,6 +113,9 @@ enum StyleEngine {
                let t = profile.learnedTerms.prefix(4).randomElement(), !q.lowercased().contains(t) {
                 q += " " + t
             }
+            if let term = c.subject.searchTerm, !words(of: q).contains(where: c.subject.positiveWords.contains) {
+                q += " " + term
+            }
             if !result.contains(q) { result.append(q) }
         }
         return result.isEmpty ? [base[0]] : result
@@ -126,11 +130,35 @@ enum StyleEngine {
         return sum / Double(t.count).squareRoot()
     }
 
+    /// Einzelwörter (klein geschrieben) – für Motiv-Erkennung über ganze Wörter.
+    static func words(of text: String) -> Set<String> {
+        Set(text.lowercased().components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty })
+    }
+
+    private static func candidateWords(_ c: PhotoCandidate) -> Set<String> {
+        words(of: ([c.title] + c.tags).joined(separator: " "))
+    }
+
     static func isExcluded(_ c: PhotoCandidate, by collection: PhotoCollection) -> Bool {
+        // Motiv: z. B. bei „Frau“ Fotos verwerfen, die klar als Mann beschrieben sind (und umgekehrt).
+        let negatives = collection.subject.negativeWords
+        if !negatives.isEmpty {
+            let w = candidateWords(c)
+            let hasNegative = !w.isDisjoint(with: negatives)
+            let hasPositive = !w.isDisjoint(with: collection.subject.positiveWords)
+            if hasNegative && !hasPositive { return true }
+        }
         let words = collection.excludedWords.map(normalizeTag).filter { !$0.isEmpty }
         guard !words.isEmpty else { return false }
         let hay = normalizeTag(([c.title] + c.tags).joined(separator: " "))
         return words.contains { hay.contains($0) }
+    }
+
+    /// Bonus, wenn ein Kandidat ausdrücklich zum gewünschten Motiv passt.
+    static func subjectBonus(_ c: PhotoCandidate, collection: PhotoCollection) -> Double {
+        let positives = collection.subject.positiveWords
+        guard !positives.isEmpty else { return 0 }
+        return candidateWords(c).isDisjoint(with: positives) ? 0 : 0.5
     }
 
     /// Wählt aus einer Vorauswahl das Bild, das am besten zum gelernten Stil passt.
@@ -146,7 +174,7 @@ enum StyleEngine {
 
         var best: (PhotoCandidate, Double)?
         for (i, c) in list.enumerated() {
-            var s = pre[i]
+            var s = pre[i] + subjectBonus(c, collection: collection)
             if let v = likedSim[i] { s += 1.4 * v }
             if let v = rejSim[i] { s -= 0.8 * v }
             if let a = analyses[c.id] {

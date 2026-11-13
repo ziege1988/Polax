@@ -216,6 +216,7 @@ struct NewCollectionSheet: View {
     @State private var keywords: [String] = []
     @State private var allowNudity = true
     @State private var darkBias = 0.3
+    @State private var subject: SubjectFocus = .any
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -227,6 +228,10 @@ struct NewCollectionSheet: View {
                 TokenEditor(title: "Schlagwörter (Englisch liefert die meisten Treffer)",
                             tokens: $keywords,
                             placeholder: "z. B. film noir portrait, Enter zum Hinzufügen")
+                Picker("Person im Bild", selection: $subject) {
+                    ForEach(SubjectFocus.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 Toggle("Aktfotografie & Mature-Inhalte zulassen", isOn: $allowNudity)
                 Slider(value: $darkBias, in: 0...1) {
                     Text("Düstere Inszenierung")
@@ -248,7 +253,7 @@ struct NewCollectionSheet: View {
             }
             .padding(16)
         }
-        .frame(width: 540, height: 520)
+        .frame(width: 560, height: 580)
     }
 
     private func create() {
@@ -257,6 +262,7 @@ struct NewCollectionSheet: View {
             if !keywords.isEmpty { c.keywords = keywords }
             c.allowNudity = allowNudity
             c.darkBias = darkBias
+            c.subject = subject
             store.update(c)
         }
         SettingsNavigation.shared.openCollection(id, tab: .search)

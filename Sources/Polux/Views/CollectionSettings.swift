@@ -81,6 +81,18 @@ private struct CollectionSearchTab: View {
                 Text("Englische Begriffe liefern die meisten Treffer. Polux kombiniert sie zufällig und ergänzt gelernte Stilbegriffe aus deinen Likes.")
                     .font(.caption).foregroundColor(.secondary)
             }
+            Section {
+                Picker("Person im Bild", selection: $collection.subject) {
+                    ForEach(SubjectFocus.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("Wer soll zu sehen sein?")
+            } footer: {
+                Text("Polux ergänzt die Suche um den passenden Begriff (z. B. „woman“) und sortiert Fotos aus, die laut Titel und Tags eindeutig nicht passen. Fotos ohne Beschreibung können trotzdem durchrutschen.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+
             Section("Was ausschließen?") {
                 TokenEditor(title: "Ausschlusswörter",
                             tokens: $collection.excludedWords,

@@ -102,6 +102,8 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
     /// 0 = egal, 1 = stark düstere / Low-Key-Bildsprache bevorzugen.
     var darkBias: Double
     var photosOnly: Bool
+    /// Wer soll auf den Fotos zu sehen sein (Frau, Mann, Paar …)?
+    var subject: SubjectFocus
     /// Pinterest-Board- oder sonstige RSS-Feed-URLs.
     var feeds: [String]
     var likes: [LikedPhoto]
@@ -119,6 +121,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
          allowNudity: Bool = true,
          darkBias: Double = 0.3,
          photosOnly: Bool = true,
+         subject: SubjectFocus = .any,
          feeds: [String] = []) {
         self.id = id
         self.name = name
@@ -128,6 +131,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         self.allowNudity = allowNudity
         self.darkBias = darkBias
         self.photosOnly = photosOnly
+        self.subject = subject
         self.feeds = feeds
         self.likes = []
         self.rejectedTags = [:]
@@ -136,7 +140,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, keywords, excludedWords, sources, allowNudity, darkBias, photosOnly, feeds
+        case id, name, keywords, excludedWords, sources, allowNudity, darkBias, photosOnly, subject, feeds
         case likes, rejectedTags, rejectedPrints, seenIDs
     }
 
@@ -152,6 +156,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         allowNudity = try c.decodeIfPresent(Bool.self, forKey: .allowNudity) ?? true
         darkBias = try c.decodeIfPresent(Double.self, forKey: .darkBias) ?? 0.3
         photosOnly = try c.decodeIfPresent(Bool.self, forKey: .photosOnly) ?? true
+        subject = (try? c.decodeIfPresent(SubjectFocus.self, forKey: .subject)) ?? .any
         feeds = try c.decodeIfPresent([String].self, forKey: .feeds) ?? []
         likes = try c.decodeIfPresent([LikedPhoto].self, forKey: .likes) ?? []
         rejectedTags = try c.decodeIfPresent([String: Double].self, forKey: .rejectedTags) ?? [:]
@@ -169,6 +174,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         try c.encode(allowNudity, forKey: .allowNudity)
         try c.encode(darkBias, forKey: .darkBias)
         try c.encode(photosOnly, forKey: .photosOnly)
+        try c.encode(subject, forKey: .subject)
         try c.encode(feeds, forKey: .feeds)
         try c.encode(likes, forKey: .likes)
         try c.encode(rejectedTags, forKey: .rejectedTags)
@@ -181,7 +187,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         [keywords.joined(separator: "|"),
          excludedWords.joined(separator: "|"),
          sources.map(\.rawValue).sorted().joined(separator: ","),
-         "\(allowNudity)", String(format: "%.2f", darkBias), "\(photosOnly)",
+         "\(allowNudity)", String(format: "%.2f", darkBias), "\(photosOnly)", subject.rawValue,
          feeds.joined(separator: "|")].joined(separator: "#")
     }
 
@@ -196,6 +202,51 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
             darkBias: 0.7,
             photosOnly: true
         )
+    }
+}
+
+/// Wer auf den Fotos einer Sammlung zu sehen sein soll.
+enum SubjectFocus: String, Codable, CaseIterable, Identifiable {
+    case any, female, male, couple
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .any: return "Beliebig"
+        case .female: return "Frau"
+        case .male: return "Mann"
+        case .couple: return "Paar"
+        }
+    }
+
+    /// Begriff, der an Suchanfragen angehängt wird (Englisch liefert die meisten Treffer).
+    var searchTerm: String? {
+        switch self {
+        case .any: return nil
+        case .female: return "woman"
+        case .male: return "man"
+        case .couple: return "couple"
+        }
+    }
+
+    /// Wörter, die auf das gewünschte Motiv hindeuten.
+    var positiveWords: Set<String> {
+        switch self {
+        case .any: return []
+        case .female: return ["woman", "women", "female", "girl", "lady", "she", "her", "bride", "frau", "mädchen", "femme", "mujer", "donna", "feminine", "actress", "ballerina"]
+        case .male: return ["man", "men", "male", "boy", "guy", "gentleman", "he", "him", "groom", "mann", "homme", "hombre", "uomo", "masculine", "beard", "bearded", "actor"]
+        case .couple: return ["couple", "couples", "lovers", "romance", "romantic", "kiss", "kissing", "embrace", "paar", "together", "wedding", "duo"]
+        }
+    }
+
+    /// Wörter, die auf ein unerwünschtes Motiv hindeuten (Kandidat wird verworfen).
+    var negativeWords: Set<String> {
+        switch self {
+        case .female: return ["man", "men", "male", "boy", "guy", "gentleman", "groom", "beard", "bearded", "mann", "homme", "hombre", "uomo", "masculine", "father", "husband"]
+        case .male: return ["woman", "women", "female", "girl", "lady", "bride", "frau", "mädchen", "femme", "mujer", "donna", "feminine", "mother", "wife", "ballerina"]
+        case .any, .couple: return []
+        }
     }
 }
 
