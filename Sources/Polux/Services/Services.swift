@@ -59,7 +59,7 @@ final class UpdateChecker: ObservableObject {
     func check() async {
         state = .checking
         let url = URL(string: "https://api.github.com/repos/\(AppInfo.updateRepository)/releases/latest")!
-        var req = URLRequest(url: url, timeoutInterval: 20)
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 20)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await HTTP.session.data(for: req)
