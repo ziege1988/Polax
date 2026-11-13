@@ -165,6 +165,15 @@ enum StyleEngine {
     static func choose(from list: [PhotoCandidate], analyses: [String: ImageAnalysis],
                        profile: StyleProfile, collection: PhotoCollection) -> PhotoCandidate? {
         guard !list.isEmpty else { return nil }
+        // Motiv-Prüfung am Bild: Bei Frau/Mann/Paar Fotos ohne erkannte Person aussortieren.
+        var list = list
+        if collection.subject != .any {
+            let withPeople = list.filter { c in
+                guard let n = analyses[c.id]?.personCount else { return true }
+                return n > 0
+            }
+            if !withPeople.isEmpty { list = withPeople }
+        }
         // Etwas Zufall, damit die Sammlung nicht in einer Stil-Blase festhängt.
         if Double.random(in: 0..<1) < 0.12 { return list.randomElement() }
 
@@ -175,6 +184,13 @@ enum StyleEngine {
         var best: (PhotoCandidate, Double)?
         for (i, c) in list.enumerated() {
             var s = pre[i] + subjectBonus(c, collection: collection)
+            if let n = analyses[c.id]?.personCount {
+                switch collection.subject {
+                case .female, .male: s += n == 1 ? 0.4 : (n > 2 ? -0.4 : 0)
+                case .couple: s += n == 2 ? 0.6 : -0.3
+                case .any: break
+                }
+            }
             if let v = likedSim[i] { s += 1.4 * v }
             if let v = rejSim[i] { s -= 0.8 * v }
             if let a = analyses[c.id] {
@@ -227,7 +243,12 @@ enum StyleEngine {
         let handler = VNImageRequestHandler(cgImage: image, options: [:])
         let classify = VNClassifyImageRequest()
         let fpRequest = VNGenerateImageFeaturePrintRequest()
-        try? handler.perform([classify, fpRequest])
+        let humans = VNDetectHumanRectanglesRequest()
+        humans.upperBodyOnly = false
+        let faces = VNDetectFaceRectanglesRequest()
+        try? handler.perform([classify, fpRequest, humans, faces])
+        let humanCount = (humans.results ?? []).filter { $0.confidence > 0.4 }.count
+        let faceCount = (faces.results ?? []).filter { $0.confidence > 0.5 }.count
 
         let labels = (classify.results ?? [])
             .filter { $0.confidence > 0.3 }
@@ -241,7 +262,37 @@ enum StyleEngine {
         }
         let stats = colorStats(image)
         return ImageAnalysis(labels: Array(labels), featurePrint: printData,
-                             luminance: stats.luminance, saturation: stats.saturation)
+                             luminance: stats.luminance, saturation: stats.saturation,
+                             personCount: max(humanCount, faceCount), dhash: dhash(image))
+    }
+
+    /// Differenz-Hash: 9×8 Graustufen, je Zeile Nachbarn vergleichen → 64 Bit.
+    /// Erkennt dasselbe Bild auch in anderer Größe oder Kompression.
+    static func dhash(_ image: CGImage) -> UInt64? {
+        let w = 9, h = 8
+        var buffer = [UInt8](repeating: 0, count: w * h)
+        let ok: Bool = buffer.withUnsafeMutableBytes { ptr in
+            guard let ctx = CGContext(data: ptr.baseAddress, width: w, height: h, bitsPerComponent: 8,
+                                      bytesPerRow: w, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            ctx.interpolationQuality = .medium
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            return true
+        }
+        guard ok else { return nil }
+        var hash: UInt64 = 0
+        var bit: UInt64 = 0
+        for y in 0..<h {
+            for x in 0..<(w - 1) {
+                if buffer[y * w + x] > buffer[y * w + x + 1] { hash |= (1 << bit) }
+                bit += 1
+            }
+        }
+        return hash
+    }
+
+    static func isNearDuplicate(_ a: UInt64, _ b: UInt64) -> Bool {
+        (a ^ b).nonzeroBitCount <= 6
     }
 
     static func colorStats(_ image: CGImage) -> (luminance: Double, saturation: Double) {

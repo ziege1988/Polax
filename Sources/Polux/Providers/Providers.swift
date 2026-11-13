@@ -41,6 +41,17 @@ enum Providers {
     }
 }
 
+/// Akzeptiert Zahl oder Text (manche APIs liefern IDs uneinheitlich).
+struct FlexString: Decodable {
+    let value: String
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let s = try? c.decode(String.self) { value = s }
+        else if let i = try? c.decode(Int.self) { value = String(i) }
+        else { value = "" }
+    }
+}
+
 // MARK: - Openverse (ohne Schlüssel; bündelt u. a. Flickr, Wikimedia Commons, Museen)
 
 struct OpenverseProvider: ImageProvider {
@@ -57,8 +68,19 @@ struct OpenverseProvider: ImageProvider {
         let source: String?
         let provider: String?
         let tags: [Tag]?
+        let license: String?
+        let license_version: String?
     }
     private struct Tag: Decodable { let name: String }
+
+    static func licenseLabel(_ license: String?, _ version: String?) -> String? {
+        guard let l = license?.lowercased(), !l.isEmpty else { return nil }
+        switch l {
+        case "cc0": return "CC0"
+        case "pdm": return "Public Domain"
+        default: return "CC \(l.uppercased())" + (version.map { " \($0)" } ?? "")
+        }
+    }
 
     func search(query: String, collection: PhotoCollection, page: Int) async throws -> [PhotoCandidate] {
         var comps = URLComponents(string: "https://api.openverse.org/v1/images/")!
@@ -80,7 +102,8 @@ struct OpenverseProvider: ImageProvider {
                 title: r.title ?? "", author: r.creator ?? "",
                 imageURL: img, fallbackImageURL: thumb, thumbURL: thumb,
                 pageURL: HTTP.secureURL(r.foreign_landing_url),
-                tags: (r.tags ?? []).map(\.name), query: query)
+                tags: (r.tags ?? []).map(\.name), query: query,
+                license: Self.licenseLabel(r.license, r.license_version))
         }
     }
 }
@@ -124,7 +147,7 @@ struct UnsplashProvider: ImageProvider {
                 imageURL: img, fallbackImageURL: thumb, thumbURL: thumb,
                 pageURL: HTTP.secureURL(r.links.html),
                 tags: (r.tags ?? []).compactMap(\.title) + [r.alt_description ?? ""].filter { !$0.isEmpty },
-                query: query)
+                query: query, license: "Unsplash-Lizenz")
         }
     }
 }
@@ -150,6 +173,22 @@ struct FlickrProvider: ImageProvider {
         let url_c: String?
         let url_z: String?
         let url_q: String?
+        let license: FlexString?
+    }
+
+    static func licenseLabel(_ id: String?) -> String? {
+        switch id ?? "" {
+        case "1": return "CC BY-NC-SA 2.0"
+        case "2": return "CC BY-NC 2.0"
+        case "3": return "CC BY-NC-ND 2.0"
+        case "4": return "CC BY 2.0"
+        case "5": return "CC BY-SA 2.0"
+        case "6": return "CC BY-ND 2.0"
+        case "7": return "Kein bekanntes Copyright"
+        case "9": return "CC0"
+        case "10": return "Public Domain"
+        default: return nil
+        }
     }
 
     func search(query: String, collection: PhotoCollection, page: Int) async throws -> [PhotoCandidate] {
@@ -164,7 +203,7 @@ struct FlickrProvider: ImageProvider {
             .init(name: "content_types", value: "0"),
             // 3 = eingeschränkte Inhalte zulassen (greift bei anonymen API-Abfragen nur eingeschränkt)
             .init(name: "safe_search", value: collection.allowNudity ? "3" : "1"),
-            .init(name: "extras", value: "url_l,url_c,url_z,url_q,tags,owner_name"),
+            .init(name: "extras", value: "url_l,url_c,url_z,url_q,tags,owner_name,license"),
             .init(name: "per_page", value: "30"),
             .init(name: "page", value: String(page)),
             .init(name: "format", value: "json"),
@@ -182,7 +221,8 @@ struct FlickrProvider: ImageProvider {
                 title: r.title ?? "", author: r.ownername ?? "",
                 imageURL: img, fallbackImageURL: HTTP.secureURL(r.url_z), thumbURL: thumb,
                 pageURL: URL(string: "https://www.flickr.com/photos/\(r.owner)/\(r.id)"),
-                tags: (r.tags ?? "").split(separator: " ").map(String.init), query: query)
+                tags: (r.tags ?? "").split(separator: " ").map(String.init), query: query,
+                license: Self.licenseLabel(r.license?.value))
         }
     }
 }
@@ -219,7 +259,7 @@ struct PexelsProvider: ImageProvider {
                 title: alt, author: r.photographer ?? "",
                 imageURL: img, fallbackImageURL: thumb, thumbURL: thumb,
                 pageURL: HTTP.secureURL(r.url),
-                tags: alt.split(separator: " ").map(String.init), query: query)
+                tags: alt.split(separator: " ").map(String.init), query: query, license: "Pexels-Lizenz")
         }
     }
 }

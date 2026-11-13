@@ -191,6 +191,13 @@ struct PolaroidView: View {
 
                 addToCollectionMenu(icon: icon)
 
+                PolaroidIconButton(systemName: "wand.and.stars", size: icon * 0.9,
+                                   color: engine.isFocusActive ? Theme.heart : Theme.ink,
+                                   help: engine.isFocusActive ? "„Mehr davon“ beenden" : "Mehr davon – ähnliche Fotos suchen") {
+                    engine.moreLikeCurrent()
+                }
+                .disabled(engine.current == nil)
+
                 PolaroidIconButton(systemName: "arrow.up.forward.square", size: icon * 0.95,
                                    help: "Originalquelle öffnen") {
                     if let c = engine.current?.candidate {

@@ -145,6 +145,15 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    /// Notiz zu einem Lieblingsfoto speichern (leer = löschen).
+    func setNote(_ note: String, for photoID: String, in collectionID: UUID) {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        mutate(collectionID, notify: false) { c in
+            guard let i = c.likes.firstIndex(where: { $0.id == photoID }) else { return }
+            c.likes[i].note = trimmed.isEmpty ? nil : trimmed
+        }
+    }
+
     func resetRejections(_ collectionID: UUID) {
         mutate(collectionID) { c in
             c.rejectedTags = [:]

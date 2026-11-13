@@ -63,6 +63,8 @@ struct PhotoCandidate: Codable, Hashable, Identifiable {
     var pageURL: URL?
     var tags: [String]
     var query: String?
+    /// Lizenzangabe (z. B. „CC BY 2.0“, „Unsplash-Lizenz“); nil = Urheberrecht beim Urheber.
+    var license: String? = nil
 }
 
 /// Ergebnis der On-Device-Bildanalyse (Apple Vision).
@@ -75,6 +77,10 @@ struct ImageAnalysis: Codable, Hashable {
     var luminance: Double
     /// Mittlere Sättigung 0…1.
     var saturation: Double
+    /// Anzahl erkannter Personen (Vision: Körper/Gesichter).
+    var personCount: Int? = nil
+    /// Wahrnehmungs-Hash (dHash, 64 Bit) zum Erkennen doppelter Bilder.
+    var dhash: UInt64? = nil
 }
 
 /// Ein gelikter, lokal gespeicherter Eintrag einer Sammlung.
@@ -89,6 +95,8 @@ struct LikedPhoto: Codable, Hashable, Identifiable {
     var aspect: Double
     /// Größe der gespeicherten Datei in Bytes.
     var bytes: Int
+    /// Eigene Notiz (z. B. Licht, Styling, Pose).
+    var note: String? = nil
 }
 
 /// Eine Sammlung mit Suchprofil, Likes und gelerntem Stil.

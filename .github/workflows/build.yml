@@ -47,6 +47,9 @@ jobs:
             [ -f "$RUNNER_TEMP/preview/$f.png" ] || continue
             sips -s format jpeg -s formatOptions 80 -Z 1400 "$RUNNER_TEMP/preview/$f.png" --out "docs/preview/$f.jpg" >/dev/null
           done
+          if [ -f "$RUNNER_TEMP/preview/moodboard.jpg" ]; then
+            sips -Z 1400 "$RUNNER_TEMP/preview/moodboard.jpg" --out docs/preview/moodboard.jpg >/dev/null
+          fi
           ls -la docs/preview
 
       - name: Vorschau im Branch ablegen

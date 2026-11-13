@@ -31,6 +31,20 @@ final class InspirationEngine: ObservableObject {
     private var timer: Timer?
     private var bag = Set<AnyCancellable>()
 
+    /// „Mehr davon“: gezielt Bilder ähnlich einem bestimmten Foto suchen.
+    struct Focus: Equatable {
+        var terms: [String]
+        var print: Data?
+        var remaining: Int
+        var label: String
+    }
+    @Published private(set) var focus: Focus?
+
+    /// Wahrnehmungs-Hashes bereits gezeigter Bilder (Duplikat-Erkennung über alle Quellen).
+    private var knownHashes: [UInt64] = []
+    private static let maxKnownHashes = 3000
+    private var hashesURL: URL { Paths.caches.appendingPathComponent("hashes.json") }
+
     init(store: LibraryStore, settings: AppSettings) {
         self.store = store
         self.settings = settings
@@ -75,6 +89,7 @@ final class InspirationEngine: ObservableObject {
     /// Zwei bis drei aussagekräftige Begriffe für die Zeile unter dem Namen.
     var tagLine: String {
         if let s = statusMessage { return s }
+        if let f = focus { return ("Mehr davon · " + f.label).uppercased() }
         let col = store.currentCollection
         if let c = current {
             let weights = profile(for: col).tagWeights
@@ -98,6 +113,7 @@ final class InspirationEngine: ObservableObject {
 
     func start() {
         loadHistory()
+        loadHashes()
         if current != nil { showEntry(at: index, animated: false) }
         let lastShown = current?.shownAt ?? .distantPast
         if current == nil || (!settings.isPaused && Date().timeIntervalSince(lastShown) >= interval) {
@@ -158,6 +174,7 @@ final class InspirationEngine: ObservableObject {
                 let fileName = try await loadDisplay(cand)
                 append(HistoryEntry(candidate: cand, collectionID: colID, fileName: fileName,
                                     analysis: analyses[cand.id]))
+                if let h = analyses[cand.id]?.dhash { rememberHash(h) }
                 statusMessage = nil
                 return
             } catch {
@@ -233,19 +250,123 @@ final class InspirationEngine: ObservableObject {
     // MARK: Vorschläge
 
     private func pickCandidate(for colID: UUID) async -> PhotoCandidate? {
-        if (pools[colID]?.count ?? 0) < 6 { await refill(colID) }
-        guard let col = store.collection(colID), let pool = pools[colID], !pool.isEmpty else { return nil }
-        let prof = profile(for: col)
-        let ranked = pool
-            .map { ($0, StyleEngine.prescore($0, profile: prof)) }
-            .sorted { $0.1 > $1.1 }
-            .map(\.0)
-        var shortlist = Array(ranked.prefix(5))
-        if let wildcard = ranked.dropFirst(5).randomElement() { shortlist.append(wildcard) }
-        await analyze(shortlist)
-        let chosen = StyleEngine.choose(from: shortlist, analyses: analyses, profile: prof, collection: col) ?? shortlist[0]
-        pools[colID]?.removeAll { $0.id == chosen.id }
-        return chosen
+        for _ in 0..<3 {
+            if (pools[colID]?.count ?? 0) < 6 { await refill(colID) }
+            guard let col = store.collection(colID), let pool = pools[colID], !pool.isEmpty else { return nil }
+            var prof = profile(for: col)
+            if let f = focus { prof = focused(prof, with: f) }
+            let ranked = pool
+                .map { ($0, StyleEngine.prescore($0, profile: prof)) }
+                .sorted { $0.1 > $1.1 }
+                .map(\.0)
+            var shortlist = Array(ranked.prefix(5))
+            if let wildcard = ranked.dropFirst(5).randomElement() { shortlist.append(wildcard) }
+            await analyze(shortlist)
+
+            // Doppelte Bilder (auch aus anderen Quellen) aussortieren.
+            let likedHashes = col.likes.compactMap { $0.analysis?.dhash }
+            let duplicates = shortlist.filter { c in
+                guard let h = analyses[c.id]?.dhash else { return false }
+                return knownHashes.contains { StyleEngine.isNearDuplicate($0, h) }
+                    || likedHashes.contains { StyleEngine.isNearDuplicate($0, h) }
+            }
+            if !duplicates.isEmpty {
+                let ids = Set(duplicates.map(\.id))
+                pools[colID]?.removeAll { ids.contains($0.id) }
+                for d in duplicates { store.markSeen(d.id, in: colID) }
+                shortlist.removeAll { ids.contains($0.id) }
+            }
+            guard !shortlist.isEmpty else { continue }
+
+            let chosen = StyleEngine.choose(from: shortlist, analyses: analyses, profile: prof, collection: col) ?? shortlist[0]
+            pools[colID]?.removeAll { $0.id == chosen.id }
+            if var f = focus {
+                f.remaining -= 1
+                focus = f.remaining > 0 ? f : nil
+            }
+            return chosen
+        }
+        return nil
+    }
+
+    /// Profil für „Mehr davon“: Ähnlichkeit zum gewählten Foto zählt am stärksten.
+    private func focused(_ base: StyleProfile, with f: Focus) -> StyleProfile {
+        var p = base
+        if let data = f.print, let fp = StyleEngine.unarchive(data) { p.likedPrints = [fp] }
+        for t in f.terms { p.tagWeights[t, default: 0] += 1.5 }
+        return p
+    }
+
+    // MARK: Mehr davon
+
+    var isFocusActive: Bool { focus != nil }
+
+    /// Sucht die nächsten Fotos gezielt im Stil des aktuellen Bildes.
+    func moreLikeCurrent() {
+        if focus != nil {
+            focus = nil
+            pools[store.currentCollectionID] = nil
+            return
+        }
+        guard let e = current else { return }
+        startFocus(candidate: e.candidate, analysis: e.analysis)
+    }
+
+    /// „Mehr davon“ aus der Galerie für ein gelikte Foto.
+    func moreLike(_ like: LikedPhoto, in collectionID: UUID) {
+        if store.currentCollectionID != collectionID { store.currentCollectionID = collectionID }
+        startFocus(candidate: like.candidate, analysis: like.analysis)
+    }
+
+    private func startFocus(candidate: PhotoCandidate, analysis: ImageAnalysis?) {
+        let colID = store.currentCollectionID
+        let subjectWords = SubjectFocus.female.positiveWords
+            .union(SubjectFocus.male.positiveWords).union(SubjectFocus.couple.positiveWords)
+        let terms = StyleEngine.terms(of: candidate.tags + (analysis?.labels ?? []))
+            .filter { !subjectWords.contains($0) && $0.count <= 20 }
+            .sorted { $0.count > $1.count }
+        let picked = Array(terms.prefix(4))
+        let label = picked.prefix(2).joined(separator: " · ")
+        focus = Focus(terms: picked, print: analysis?.featurePrint, remaining: 6,
+                      label: label.isEmpty ? "ähnlicher Stil" : label)
+        pools[colID] = nil
+        statusMessage = nil
+        Task { await fetchNew() }
+        reschedule()
+    }
+
+    private func focusQueries(for col: PhotoCollection, _ f: Focus) -> [String] {
+        var base = col.keywords.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        if base.isEmpty { base = [col.name] }
+        var out: [String] = []
+        for _ in 0..<6 where out.count < 3 {
+            var q = base.randomElement()!
+            for t in f.terms.shuffled().prefix(2) where !q.lowercased().contains(t) { q += " " + t }
+            if let term = col.subject.searchTerm, !StyleEngine.words(of: q).contains(where: col.subject.positiveWords.contains) {
+                q += " " + term
+            }
+            if !out.contains(q) { out.append(q) }
+        }
+        return out
+    }
+
+    // MARK: Duplikate
+
+    private func rememberHash(_ h: UInt64) {
+        knownHashes.append(h)
+        if knownHashes.count > Self.maxKnownHashes {
+            knownHashes.removeFirst(knownHashes.count - Self.maxKnownHashes)
+        }
+        if let data = try? JSONEncoder().encode(knownHashes) {
+            try? data.write(to: hashesURL, options: .atomic)
+        }
+    }
+
+    private func loadHashes() {
+        if let data = try? Data(contentsOf: hashesURL),
+           let list = try? JSONDecoder().decode([UInt64].self, from: data) {
+            knownHashes = list
+        }
     }
 
     private func refill(_ colID: UUID, preferLearned: Bool = false) async {
@@ -260,7 +381,9 @@ final class InspirationEngine: ObservableObject {
         var errors: [String] = []
 
         for attempt in 0..<2 where fresh.isEmpty {
-            let queries = StyleEngine.queries(for: col, profile: prof, count: 3, preferLearned: preferLearned && attempt == 0)
+            let queries = (focus != nil && attempt == 0)
+                ? focusQueries(for: col, focus!)
+                : StyleEngine.queries(for: col, profile: prof, count: 3, preferLearned: preferLearned && attempt == 0)
             let results = await withTaskGroup(of: (SourceKind, Result<[PhotoCandidate], Error>).self) { group -> [(SourceKind, Result<[PhotoCandidate], Error>)] in
                 for kind in kinds {
                     let query = queries.randomElement() ?? col.name

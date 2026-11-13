@@ -26,6 +26,25 @@ enum PreviewRenderer {
             }
         }
 
+        if let first = store.collection(colID)?.likes.first {
+            store.setNote("Licht von links, Schleier, roter Lippenstift", for: first.id, in: colID)
+        }
+        if let likes = store.collection(colID)?.likes, let col = store.collection(colID) {
+            let items: [MoodboardExporter.Item] = likes.compactMap { like in
+                guard let img = ThumbnailCache.cached(store.likeFileURL(like, in: colID)) else { return nil }
+                return MoodboardExporter.Item(id: like.id, image: img, aspect: like.aspect)
+            }
+            var credited = likes
+            for i in credited.indices {
+                credited[i].candidate.author = ["Anna K.", "M. Weber", "", "Jules R."][i % 4]
+                credited[i].candidate.license = [nil, "CC BY 2.0", "CC BY-SA 4.0", "Unsplash-Lizenz"][i % 4]
+            }
+            if let data = MoodboardExporter.render(items: items, credits: MoodboardExporter.credits(for: credited)) {
+                try? data.write(to: dir.appendingPathComponent("moodboard.jpg"))
+                print("Polux preview: wrote moodboard.jpg (\(col.name))")
+            }
+        }
+
         // Aktuelles Polaroid-Foto
         if let cg = sampleImage(width: 800, height: 1000, seed: 42) {
             var cand = sampleCandidate(99)

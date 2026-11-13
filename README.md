@@ -95,3 +95,7 @@ Wird bei jedem Build automatisch auf einem Mac gerendert (mit Platzhalterbildern
 | Sammlung: Suche | Sammlung: Quellen |
 |---|---|
 | ![Sammlung](docs/preview/settings-collection.jpg) | ![Sammlung Quellen](docs/preview/settings-collection-sources.jpg) |
+
+| Moodboard-Export |
+|---|
+| ![Moodboard](docs/preview/moodboard.jpg) |
