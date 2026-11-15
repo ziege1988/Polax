@@ -112,8 +112,9 @@ private struct CollectionSearchTab: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                Label("Gemälde, Zeichnungen und Illustrationen werden grundsätzlich aussortiert. KI-Bilder, die wie echte Fotos wirken, sind erlaubt.",
-                      systemImage: "photo")
+                Toggle("Nur Bilder mit Personen", isOn: $collection.requirePeople)
+                Label("Erlaubt sind Fotos sowie Digitalkunst und KI-Bilder mit Personen. Klassische Gemälde, Anime/Comic, Stillleben und Abstraktes werden aussortiert.",
+                      systemImage: "person.crop.rectangle")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

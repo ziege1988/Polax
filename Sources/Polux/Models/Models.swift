@@ -114,6 +114,8 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
     var photosOnly: Bool
     /// Wer soll auf den Fotos zu sehen sein (Frau, Mann, Paar …)?
     var subject: SubjectFocus
+    /// Nur Bilder mit Personen (keine Stillleben, Landschaften oder Abstraktes).
+    var requirePeople: Bool
     /// Pinterest-Board- oder sonstige RSS-Feed-URLs.
     var feeds: [String]
     var likes: [LikedPhoto]
@@ -127,11 +129,12 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
          name: String,
          keywords: [String] = [],
          excludedWords: [String] = [],
-         sources: Set<SourceKind> = Set(SourceKind.allCases).subtracting([.artstation]),
+         sources: Set<SourceKind> = Set(SourceKind.allCases),
          allowNudity: Bool = true,
          darkBias: Double = 0.3,
          photosOnly: Bool = true,
          subject: SubjectFocus = .any,
+         requirePeople: Bool = true,
          feeds: [String] = []) {
         self.id = id
         self.name = name
@@ -142,6 +145,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         self.darkBias = darkBias
         self.photosOnly = photosOnly
         self.subject = subject
+        self.requirePeople = requirePeople
         self.feeds = feeds
         self.likes = []
         self.rejectedTags = [:]
@@ -150,7 +154,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, keywords, excludedWords, sources, allowNudity, darkBias, photosOnly, subject, feeds
+        case id, name, keywords, excludedWords, sources, allowNudity, darkBias, photosOnly, subject, requirePeople, feeds
         case likes, rejectedTags, rejectedPrints, seenIDs
     }
 
@@ -167,6 +171,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         darkBias = try c.decodeIfPresent(Double.self, forKey: .darkBias) ?? 0.3
         photosOnly = try c.decodeIfPresent(Bool.self, forKey: .photosOnly) ?? true
         subject = (try? c.decodeIfPresent(SubjectFocus.self, forKey: .subject)) ?? .any
+        requirePeople = try c.decodeIfPresent(Bool.self, forKey: .requirePeople) ?? true
         feeds = try c.decodeIfPresent([String].self, forKey: .feeds) ?? []
         likes = try c.decodeIfPresent([LikedPhoto].self, forKey: .likes) ?? []
         rejectedTags = try c.decodeIfPresent([String: Double].self, forKey: .rejectedTags) ?? [:]
@@ -185,6 +190,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         try c.encode(darkBias, forKey: .darkBias)
         try c.encode(photosOnly, forKey: .photosOnly)
         try c.encode(subject, forKey: .subject)
+        try c.encode(requirePeople, forKey: .requirePeople)
         try c.encode(feeds, forKey: .feeds)
         try c.encode(likes, forKey: .likes)
         try c.encode(rejectedTags, forKey: .rejectedTags)
@@ -197,7 +203,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
         [keywords.joined(separator: "|"),
          excludedWords.joined(separator: "|"),
          sources.map(\.rawValue).sorted().joined(separator: ","),
-         "\(allowNudity)", String(format: "%.2f", darkBias), "\(photosOnly)", subject.rawValue,
+         "\(allowNudity)", String(format: "%.2f", darkBias), "\(photosOnly)", subject.rawValue, "\(requirePeople)",
          feeds.joined(separator: "|")].joined(separator: "#")
     }
 

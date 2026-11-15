@@ -98,7 +98,7 @@ extension SourceKind {
     var tagline: String {
         switch self {
         case .openverse: return "Flickr CC, Wikimedia & Museen · Akt möglich"
-        case .artstation: return "Digitale Kunst · viel Gemaltes"
+        case .artstation: return "Digitalkunst & KI-Bilder mit Personen"
         case .rss: return "Eigene öffentliche Boards je Sammlung"
         case .unsplash: return "Kuratierte Fotografie · kaum Akt"
         case .flickr: return "Riesiges Fotoarchiv"

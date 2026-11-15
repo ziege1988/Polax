@@ -1,10 +1,15 @@
-## Polux 1.0.7
+## Polux 1.0.8
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 
+**Neu in 1.0.8**
+- Feinere Bildregeln: Fotos sowie **Digitalkunst und KI-Bilder mit Personen** sind erlaubt. Aussortiert werden klassische Gemälde und Zeichnungen, **Anime/Comic**, **Stillleben** und **Abstraktes**.
+- Neue Option je Sammlung: **„Nur Bilder mit Personen“** (Standard: an) – geprüft per Bilderkennung.
+- ArtStation ist für neue Sammlungen wieder aktiv.
+
 **Neu in 1.0.7**
 - **Updates installieren sich automatisch:** Polux prüft beim Start und alle 6 Stunden und installiert neue Versionen ohne Rückfrage (abschaltbar unter Einstellungen → Updates).
-- **Keine Gemälde mehr:** Gemälde, Zeichnungen und Illustrationen werden über Titel/Tags und per Bilderkennung aussortiert. KI-Bilder, die wie echte Fotos wirken, bleiben erlaubt. Neue Sammlungen nutzen ArtStation standardmäßig nicht.
+- Gemälde werden über Titel/Tags und per Bilderkennung aussortiert.
 
 **Neu in 1.0.6**
 - **Moodboard-Export:** In der Galerie Fotos auswählen und als Bild (JPEG) exportieren – Mosaik mit „polux“-Schriftzug, ganz unten eine kleine Fußnote mit Urheber und Lizenz.
@@ -35,7 +40,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.7.zip` herunterladen und entpacken.
+1. `Polux-1.0.8.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

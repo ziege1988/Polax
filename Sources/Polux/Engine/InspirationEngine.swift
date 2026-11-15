@@ -263,10 +263,11 @@ final class InspirationEngine: ObservableObject {
             if let wildcard = ranked.dropFirst(5).randomElement() { shortlist.append(wildcard) }
             await analyze(shortlist)
 
-            // Doppelte Bilder (auch aus anderen Quellen) und Gemälde (Bilderkennung) aussortieren.
+            // Doppelte Bilder, Cartoon/Anime und Bilder ohne Personen (Stillleben, Abstraktes) aussortieren.
             let likedHashes = col.likes.compactMap { $0.analysis?.dhash }
             let duplicates = shortlist.filter { c in
                 if StyleEngine.looksLikePainting(analyses[c.id]) { return true }
+                if StyleEngine.lacksPeople(analyses[c.id], collection: col) { return true }
                 guard let h = analyses[c.id]?.dhash else { return false }
                 return knownHashes.contains { StyleEngine.isNearDuplicate($0, h) }
                     || likedHashes.contains { StyleEngine.isNearDuplicate($0, h) }

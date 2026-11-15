@@ -130,49 +130,72 @@ enum StyleEngine {
         return sum / Double(t.count).squareRoot()
     }
 
-    // MARK: Keine Gemälde
+    // MARK: Was nicht vorgeschlagen wird
+    //
+    // Erlaubt: Fotos sowie Digitalkunst/KI-Bilder mit Personen.
+    // Aussortiert: klassische Gemälde & Zeichnungen, Anime/Comic, Stillleben und Abstraktes.
 
-    /// Begriffe in Titel/Tags, die auf Gemälde, Zeichnungen oder Illustrationen hindeuten.
-    /// Bewusst ohne Fotografie-Fachbegriffe wie „Rembrandt-Licht“, „Caravaggio“, „baroque“ oder „pastel“,
-    /// die oft gerade Fotos mit malerischer Lichtsetzung beschreiben.
+    /// Klassische Malerei und Zeichnung (Titel/Tags). Bewusst ohne Fotografie-Fachbegriffe
+    /// wie „Rembrandt-Licht“, „Caravaggio“, „baroque“ und ohne „digital art“/„concept art“.
     static let paintingWords: Set<String> = [
-        "painting", "paintings", "painted", "oilpainting", "acrylic", "watercolor", "watercolour",
-        "aquarelle", "gouache", "tempera", "canvas", "fresco", "mural", "drawing", "drawings", "sketch",
-        "sketches", "sketchbook", "illustration", "illustrations", "illustrator", "artwork", "lithograph",
-        "etching", "engraving", "woodcut", "inkdrawing", "comic", "comics", "manga", "anime", "cartoon",
-        "conceptart", "digitalpainting", "speedpaint", "fanart",
-        "gemälde", "malerei", "ölgemälde", "aquarell", "zeichnung", "illustrationen", "leinwand",
+        "oilpainting", "acrylic", "watercolor", "watercolour", "aquarelle", "gouache", "tempera",
+        "canvas", "fresco", "mural", "lithograph", "etching", "engraving", "woodcut", "inkdrawing",
+        "graphite", "charcoaldrawing", "sketchbook",
+        "gemälde", "malerei", "ölgemälde", "aquarell", "zeichnung", "leinwand",
         "peinture", "pintura", "dipinto"
     ]
 
-    /// Mehrwort-Begriffe (werden im zusammengefügten Text gesucht).
-    static let paintingPhrases: [String] = [
-        "oil on canvas", "oil painting", "digital painting", "concept art", "acrylic on", "on canvas",
-        "oil on panel", "pen and ink"
+    /// Anime, Comic & Cartoon.
+    static let animeWords: Set<String> = [
+        "anime", "manga", "cartoon", "cartoons", "comic", "comics", "chibi", "kawaii", "waifu", "husbando",
+        "hentai", "ecchi", "vtuber", "toon", "pixar", "fanart", "otaku"
     ]
 
-    /// Vision-Kennungen, die für gemalte/gezeichnete Bilder stehen – zur Laufzeit aus der Taxonomie ermittelt.
+    /// Stillleben, Produkte und Abstraktes.
+    static let stillLifeWords: Set<String> = [
+        "stilllife", "stillleben", "abstract", "abstraction", "abstrakt", "fractal", "mandala",
+        "geometric", "flatlay", "product", "products", "food"
+    ]
+
+    static let excludedPhrases: [String] = [
+        "oil on canvas", "oil painting", "acrylic on", "on canvas", "oil on panel", "pen and ink",
+        "pencil drawing", "charcoal drawing", "still life", "flat lay", "product photography",
+        "food photography", "abstract art", "anime style", "anime girl", "manga style", "cartoon style"
+    ]
+
+    /// Vision-Kennungen für Cartoon/Anime/Comic – zur Laufzeit aus der Taxonomie ermittelt.
+    /// (Gemalt wirkende Digitalkunst mit Personen bleibt erlaubt.)
     static let artIdentifiers: Set<String> = {
-        let keys = ["painting", "drawing", "sketch", "illustration", "cartoon", "anime", "comic",
-                    "watercolor", "canvas", "mural", "graffiti", "fresco", "art_print", "artwork"]
+        let keys = ["cartoon", "anime", "comic"]
         let all = (try? VNClassifyImageRequest().supportedIdentifiers()) ?? []
         let found = all.filter { id in keys.contains { id.lowercased().contains($0) } }
-        return Set(found.isEmpty ? ["painting", "drawing", "sketch", "illustrations", "cartoon"] : found)
+        return Set(found.isEmpty ? ["cartoon"] : found)
     }()
 
-    /// Ab diesem Vision-Wert gilt ein Bild als Gemälde/Illustration.
+    /// Ab diesem Vision-Wert gilt ein Bild als Cartoon/Anime.
     static let artThreshold = 0.3
 
+    /// Prüft Titel/Tags auf Gemälde, Anime, Stillleben oder Abstraktes.
     static func looksLikePainting(_ c: PhotoCandidate) -> Bool {
         let w = words(of: ([c.title] + c.tags).joined(separator: " "))
-        if !w.isDisjoint(with: paintingWords) { return true }
+        if !w.isDisjoint(with: paintingWords) || !w.isDisjoint(with: animeWords) || !w.isDisjoint(with: stillLifeWords) {
+            return true
+        }
         let hay = ([c.title] + c.tags).joined(separator: " ").lowercased()
-        return paintingPhrases.contains { hay.contains($0) }
+        return excludedPhrases.contains { hay.contains($0) }
     }
 
+    /// Bilderkennung: wirkt das Bild wie Cartoon/Anime?
     static func looksLikePainting(_ a: ImageAnalysis?) -> Bool {
         guard let score = a?.artScore else { return false }
         return score >= artThreshold
+    }
+
+    /// Ohne erkannte Person, obwohl die Sammlung Personen verlangt (Stillleben, Landschaft, Abstraktes)?
+    static func lacksPeople(_ a: ImageAnalysis?, collection: PhotoCollection) -> Bool {
+        guard collection.requirePeople || collection.subject != .any else { return false }
+        guard let n = a?.personCount else { return false }
+        return n == 0
     }
 
     /// Einzelwörter (klein geschrieben) – für Motiv-Erkennung über ganze Wörter.
@@ -214,7 +237,7 @@ enum StyleEngine {
         guard !list.isEmpty else { return nil }
         // Motiv-Prüfung am Bild: Bei Frau/Mann/Paar Fotos ohne erkannte Person aussortieren.
         var list = list
-        if collection.subject != .any {
+        if collection.subject != .any || collection.requirePeople {
             let withPeople = list.filter { c in
                 guard let n = analyses[c.id]?.personCount else { return true }
                 return n > 0
