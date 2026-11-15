@@ -142,7 +142,13 @@ enum StyleEngine {
         "canvas", "fresco", "mural", "lithograph", "etching", "engraving", "woodcut", "inkdrawing",
         "graphite", "charcoaldrawing", "sketchbook",
         "gemälde", "malerei", "ölgemälde", "aquarell", "zeichnung", "leinwand",
-        "peinture", "pintura", "dipinto"
+        "peinture", "pintura", "dipinto",
+        // Abfotografierte Kunstwerke / Alte Meister / Museen
+        "altar", "altarpiece", "triptych", "diptych", "polyptych", "retable", "retablo", "iconography",
+        "bosch", "hieronymus", "bruegel", "brueghel", "dürer", "durer", "botticelli", "titian", "tizian",
+        "museum", "museo", "musée", "musee", "louvre", "prado", "uffizi", "rijksmuseum", "mauritshuis",
+        "kunsthistorisches", "hermitage", "century", "jahrhundert", "siècle", "medieval", "mittelalter",
+        "painter", "maler"
     ]
 
     /// Anime, Comic & Cartoon.
@@ -160,8 +166,27 @@ enum StyleEngine {
     static let excludedPhrases: [String] = [
         "oil on canvas", "oil painting", "acrylic on", "on canvas", "oil on panel", "pen and ink",
         "pencil drawing", "charcoal drawing", "still life", "flat lay", "product photography",
-        "food photography", "abstract art", "anime style", "anime girl", "manga style", "cartoon style"
+        "food photography", "abstract art", "anime style", "anime girl", "manga style", "cartoon style",
+        "national gallery", "old master", "alte meister", "art institute", "public domain art",
+        "vision of tondal", "last judgment", "garden of earthly"
     ]
+
+    /// Vision-Kennungen für Gemälde/Zeichnung – greift bei allen Quellen außer Digitalkunst (ArtStation).
+    static let paintIdentifiers: Set<String> = {
+        let keys = ["painting", "drawing", "sketch", "watercolor", "fresco", "mural", "canvas"]
+        let all = (try? VNClassifyImageRequest().supportedIdentifiers()) ?? []
+        let found = all.filter { id in keys.contains { id.lowercased().contains($0) } }
+        return Set(found.isEmpty ? ["painting", "drawing"] : found)
+    }()
+
+    static let paintThreshold = 0.35
+
+    /// Bilderkennung: Gemälde? Digitalkunst-Quellen (ArtStation) sind ausgenommen,
+    /// weil dort gemalt wirkende Bilder mit Personen ausdrücklich erlaubt sind.
+    static func looksLikeClassicPainting(_ c: PhotoCandidate, _ a: ImageAnalysis?) -> Bool {
+        guard c.source != .artstation, let score = a?.paintScore else { return false }
+        return score >= paintThreshold
+    }
 
     /// Vision-Kennungen für Cartoon/Anime/Comic – zur Laufzeit aus der Taxonomie ermittelt.
     /// (Gemalt wirkende Digitalkunst mit Personen bleibt erlaubt.)
@@ -324,6 +349,10 @@ enum StyleEngine {
             .filter { artIdentifiers.contains($0.identifier) }
             .map { Double($0.confidence) }
             .max() ?? 0
+        let paintScore = (classify.results ?? [])
+            .filter { paintIdentifiers.contains($0.identifier) }
+            .map { Double($0.confidence) }
+            .max() ?? 0
         let labels = (classify.results ?? [])
             .filter { $0.confidence > 0.3 }
             .sorted { $0.confidence > $1.confidence }
@@ -338,7 +367,7 @@ enum StyleEngine {
         return ImageAnalysis(labels: Array(labels), featurePrint: printData,
                              luminance: stats.luminance, saturation: stats.saturation,
                              personCount: max(humanCount, faceCount), dhash: dhash(image),
-                             artScore: artScore)
+                             artScore: artScore, paintScore: paintScore)
     }
 
     /// Differenz-Hash: 9×8 Graustufen, je Zeile Nachbarn vergleichen → 64 Bit.

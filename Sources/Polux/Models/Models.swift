@@ -83,6 +83,8 @@ struct ImageAnalysis: Codable, Hashable {
     var dhash: UInt64? = nil
     /// Wie stark das Bild nach Gemälde/Zeichnung/Illustration aussieht (0…1, Vision).
     var artScore: Double? = nil
+    /// Wie stark das Bild nach Gemälde/Zeichnung aussieht (0…1, Vision).
+    var paintScore: Double? = nil
 }
 
 /// Ein gelikter, lokal gespeicherter Eintrag einer Sammlung.

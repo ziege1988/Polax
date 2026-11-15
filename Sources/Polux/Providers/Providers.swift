@@ -90,8 +90,10 @@ struct OpenverseProvider: ImageProvider {
             .init(name: "page", value: String(page))
         ]
         if collection.allowNudity { items.append(.init(name: "mature", value: "true")) }
-        // Grundsätzlich nur Fotografien (keine Gemälde/Illustrationen aus Museen & Archiven).
+        // Nur echte Fotografie-Quellen: Museums- und Archivbestände (Wikimedia, Museen) enthalten
+        // viele abfotografierte Gemälde, die Openverse trotzdem als „photograph“ einstuft.
         items.append(.init(name: "category", value: "photograph"))
+        items.append(.init(name: "source", value: "flickr,stocksnap,wordpress"))
         comps.queryItems = items
         let resp = try await HTTP.json(Response.self, comps.url!)
         return resp.results.compactMap { r in

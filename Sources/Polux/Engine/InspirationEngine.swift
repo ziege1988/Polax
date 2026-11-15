@@ -267,6 +267,7 @@ final class InspirationEngine: ObservableObject {
             let likedHashes = col.likes.compactMap { $0.analysis?.dhash }
             let duplicates = shortlist.filter { c in
                 if StyleEngine.looksLikePainting(analyses[c.id]) { return true }
+                if StyleEngine.looksLikeClassicPainting(c, analyses[c.id]) { return true }
                 if StyleEngine.lacksPeople(analyses[c.id], collection: col) { return true }
                 guard let h = analyses[c.id]?.dhash else { return false }
                 return knownHashes.contains { StyleEngine.isNearDuplicate($0, h) }
