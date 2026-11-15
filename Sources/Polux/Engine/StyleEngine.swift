@@ -113,6 +113,9 @@ enum StyleEngine {
                let t = profile.learnedTerms.prefix(4).randomElement(), !q.lowercased().contains(t) {
                 q += " " + t
             }
+            if c.requirePeople, c.subject == .any, words(of: q).isDisjoint(with: peopleWords) {
+                q += " portrait"
+            }
             if let term = c.subject.searchTerm, !words(of: q).contains(where: c.subject.positiveWords.contains) {
                 q += " " + term
             }
@@ -155,6 +158,23 @@ enum StyleEngine {
     static let animeWords: Set<String> = [
         "anime", "manga", "cartoon", "cartoons", "comic", "comics", "chibi", "kawaii", "waifu", "husbando",
         "hentai", "ecchi", "vtuber", "toon", "pixar", "fanart", "otaku"
+    ]
+
+    /// Wörter, die auf Menschen im Bild hindeuten.
+    static let peopleWords: Set<String> = [
+        "portrait", "portraits", "people", "person", "model", "models", "woman", "women", "man", "men",
+        "girl", "boy", "lady", "couple", "nude", "body", "face", "figure", "dancer", "bride", "selfie",
+        "fashion", "boudoir", "porträt", "frau", "mann", "akt", "modell"
+    ]
+
+    /// Motive ohne Menschen (Architektur, Landschaft, Stadt) – nur relevant, wenn Personen verlangt sind
+    /// und Titel/Tags keinen Hinweis auf Menschen enthalten.
+    static let placeWords: Set<String> = [
+        "architecture", "building", "buildings", "facade", "palace", "castle", "church", "cathedral",
+        "monument", "landmark", "statue", "sculpture", "skyline", "cityscape", "city", "street", "bridge",
+        "landscape", "nature", "forest", "mountain", "mountains", "sea", "beach", "sunset", "sky", "clouds",
+        "interior", "ruins", "arch", "tower", "museum", "night", "lights", "illumination", "car", "cars",
+        "architektur", "gebäude", "kirche", "schloss", "landschaft", "stadt"
     ]
 
     /// Stillleben, Produkte und Abstraktes.
@@ -219,7 +239,7 @@ enum StyleEngine {
     /// Ohne erkannte Person, obwohl die Sammlung Personen verlangt (Stillleben, Landschaft, Abstraktes)?
     static func lacksPeople(_ a: ImageAnalysis?, collection: PhotoCollection) -> Bool {
         guard collection.requirePeople || collection.subject != .any else { return false }
-        guard let n = a?.personCount else { return false }
+        guard let n = a?.personCount else { return true }   // nicht prüfbar → lieber aussortieren
         return n == 0
     }
 
@@ -235,6 +255,10 @@ enum StyleEngine {
     static func isExcluded(_ c: PhotoCandidate, by collection: PhotoCollection) -> Bool {
         // Grundsätzlich keine Gemälde, Zeichnungen oder Illustrationen.
         if looksLikePainting(c) { return true }
+        if collection.requirePeople || collection.subject != .any {
+            let w = candidateWords(c)
+            if w.isDisjoint(with: peopleWords) && !w.isDisjoint(with: placeWords) { return true }
+        }
         // Motiv: z. B. bei „Frau“ Fotos verwerfen, die klar als Mann beschrieben sind (und umgekehrt).
         let negatives = collection.subject.negativeWords
         if !negatives.isEmpty {
@@ -264,7 +288,7 @@ enum StyleEngine {
         var list = list
         if collection.subject != .any || collection.requirePeople {
             let withPeople = list.filter { c in
-                guard let n = analyses[c.id]?.personCount else { return true }
+                guard let n = analyses[c.id]?.personCount else { return false }
                 return n > 0
             }
             if !withPeople.isEmpty { list = withPeople }
@@ -342,8 +366,11 @@ enum StyleEngine {
         humans.upperBodyOnly = false
         let faces = VNDetectFaceRectanglesRequest()
         try? handler.perform([classify, fpRequest, humans, faces])
-        let humanCount = (humans.results ?? []).filter { $0.confidence > 0.4 }.count
-        let faceCount = (faces.results ?? []).filter { $0.confidence > 0.5 }.count
+        // Nur deutlich sichtbare Personen zählen – kleine Figuren (Statuen, Passanten in der Ferne) nicht.
+        let humanCount = (humans.results ?? [])
+            .filter { $0.confidence > 0.4 && $0.boundingBox.height >= 0.22 }.count
+        let faceCount = (faces.results ?? [])
+            .filter { $0.confidence > 0.5 && $0.boundingBox.height >= 0.06 }.count
 
         let artScore = (classify.results ?? [])
             .filter { artIdentifiers.contains($0.identifier) }

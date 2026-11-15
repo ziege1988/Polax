@@ -1,6 +1,11 @@
-## Polux 1.0.9
+## Polux 1.0.10
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.10**
+- „Nur Bilder mit Personen“ deutlich strenger: Es zählen nur gut sichtbare Personen (keine Statuen oder Passanten in der Ferne); Bilder, die sich nicht prüfen lassen, werden aussortiert.
+- Architektur, Landschaft und Stadtansichten ohne Menschen werden auch über Titel/Tags erkannt.
+- Suchanfragen ohne Personenbezug werden automatisch um „portrait“ ergänzt.
 
 **Neu in 1.0.9**
 - Keine abfotografierten Gemälde mehr: Openverse liefert nur noch aus echten Fotoquellen (Flickr, StockSnap, WordPress-Fotos) statt aus Museums-/Wikimedia-Archiven.
@@ -44,7 +49,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.9.zip` herunterladen und entpacken.
+1. `Polux-1.0.10.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.
