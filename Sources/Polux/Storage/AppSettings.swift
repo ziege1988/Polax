@@ -14,6 +14,8 @@ final class AppSettings: ObservableObject {
     @Published var thumbnailMaxPixel: Int { didSet { d.set(thumbnailMaxPixel, forKey: "thumbnailMaxPixel") } }
     @Published var thumbnailQuality: Double { didSet { d.set(thumbnailQuality, forKey: "thumbnailQuality") } }
     @Published var autoCheckUpdates: Bool { didSet { d.set(autoCheckUpdates, forKey: "autoCheckUpdates") } }
+    /// Neue Versionen ohne Rückfrage installieren (beim Start bzw. alle paar Stunden).
+    @Published var autoInstallUpdates: Bool { didSet { d.set(autoInstallUpdates, forKey: "autoInstallUpdates") } }
     @Published var lastUpdateCheck: Date? { didSet { d.set(lastUpdateCheck, forKey: "lastUpdateCheck") } }
 
     private init() {
@@ -24,7 +26,8 @@ final class AppSettings: ObservableObject {
             "polaroidSize": PolaroidSize.medium.rawValue,
             "thumbnailMaxPixel": 900,
             "thumbnailQuality": 0.6,
-            "autoCheckUpdates": true
+            "autoCheckUpdates": true,
+            "autoInstallUpdates": true
         ])
         intervalMinutes = max(1, d.integer(forKey: "intervalMinutes"))
         isPaused = d.bool(forKey: "isPaused")
@@ -33,6 +36,7 @@ final class AppSettings: ObservableObject {
         thumbnailMaxPixel = d.integer(forKey: "thumbnailMaxPixel")
         thumbnailQuality = d.double(forKey: "thumbnailQuality")
         autoCheckUpdates = d.bool(forKey: "autoCheckUpdates")
+        autoInstallUpdates = d.bool(forKey: "autoInstallUpdates")
         lastUpdateCheck = d.object(forKey: "lastUpdateCheck") as? Date
     }
 }

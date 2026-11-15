@@ -449,7 +449,12 @@ struct UpdatesSettingsView: View {
             }
             Section {
                 LabeledContent("Installierte Version", value: AppInfo.version)
-                Toggle("Automatisch einmal täglich prüfen", isOn: $settings.autoCheckUpdates)
+                Toggle("Updates automatisch installieren", isOn: $settings.autoInstallUpdates)
+                Text(settings.autoInstallUpdates
+                     ? "Polux prüft beim Start und alle 6 Stunden. Eine neue Version wird ohne Rückfrage installiert, danach startet Polux neu."
+                     : "Polux prüft beim Start und alle 6 Stunden und fragt nach, bevor es eine neue Version installiert.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 HStack {
                     Button("Jetzt nach Updates suchen") { Task { await updater.check() } }
                         .disabled(updater.isBusy)

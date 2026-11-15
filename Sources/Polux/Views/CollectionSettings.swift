@@ -112,7 +112,10 @@ private struct CollectionSearchTab: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                Toggle("Nur Fotografien (keine Illustrationen)", isOn: $collection.photosOnly)
+                Label("Gemälde, Zeichnungen und Illustrationen werden grundsätzlich aussortiert. KI-Bilder, die wie echte Fotos wirken, sind erlaubt.",
+                      systemImage: "photo")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
         }
         .formStyle(.grouped)

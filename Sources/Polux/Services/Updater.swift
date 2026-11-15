@@ -83,12 +83,34 @@ final class UpdateChecker: ObservableObject {
         }
     }
 
-    /// Höchstens einmal täglich automatisch prüfen; bei neuer Version einmalig nachfragen.
-    func checkIfDue() async {
-        guard AppSettings.shared.autoCheckUpdates else { return }
-        if let last = AppSettings.shared.lastUpdateCheck, Date().timeIntervalSince(last) < 24 * 3600 { return }
+    private var timer: Timer?
+
+    /// Prüft beim Start und danach alle 6 Stunden.
+    /// Mit „automatisch installieren“ wird eine neue Version ohne Rückfrage installiert (Polux startet neu),
+    /// sonst fragt Polux einmal pro Version nach.
+    func startAutomaticChecks() {
+        timer?.invalidate()
+        let t = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.automaticCheck() }
+        }
+        t.tolerance = 600
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+        Task {
+            // Kurz warten, damit Polux erst vollständig gestartet ist.
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await automaticCheck()
+        }
+    }
+
+    private func automaticCheck() async {
+        let settings = AppSettings.shared
+        guard settings.autoCheckUpdates || settings.autoInstallUpdates, !isBusy else { return }
         await check()
-        if let v = availableVersion, UserDefaults.standard.string(forKey: "updatePromptedVersion") != v {
+        guard let v = availableVersion else { return }
+        if settings.autoInstallUpdates {
+            await install(silent: true)
+        } else if UserDefaults.standard.string(forKey: "updatePromptedVersion") != v {
             UserDefaults.standard.set(v, forKey: "updatePromptedVersion")
             promptInstall(version: v)
         }
@@ -108,7 +130,7 @@ final class UpdateChecker: ObservableObject {
 
     // MARK: Installieren
 
-    func install() async {
+    func install(silent: Bool = false) async {
         guard let p = pending else { return }
         guard let zipURL = p.zip else {
             NSWorkspace.shared.open(p.page)
@@ -117,6 +139,7 @@ final class UpdateChecker: ObservableObject {
         let target = Bundle.main.bundleURL
         if let problem = Self.installProblem(for: target) {
             state = .failed(problem)
+            if silent { reportSilentFailure(problem) }
             return
         }
 
@@ -169,8 +192,24 @@ final class UpdateChecker: ObservableObject {
             try? await Task.sleep(nanoseconds: 300_000_000)
             NSApp.terminate(nil)
         } catch {
-            state = .failed("Update fehlgeschlagen: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)")
+            let message = "Update fehlgeschlagen: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+            state = .failed(message)
+            if silent { reportSilentFailure(message) }
         }
+    }
+
+    /// Automatisches Update gescheitert: einmal pro Version Bescheid geben.
+    private func reportSilentFailure(_ message: String) {
+        let key = "updateFailureShown"
+        let v = pending?.version ?? ""
+        guard UserDefaults.standard.string(forKey: key) != v else { return }
+        UserDefaults.standard.set(v, forKey: key)
+        let alert = NSAlert()
+        alert.messageText = "Polux konnte sich nicht automatisch aktualisieren"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     /// Prüft, ob die laufende App ersetzt werden kann.

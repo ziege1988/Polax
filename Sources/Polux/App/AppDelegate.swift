@@ -56,7 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             }
             .store(in: &bag)
 
-        Task { await updater.checkIfDue() }
+        updater.startAutomaticChecks()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

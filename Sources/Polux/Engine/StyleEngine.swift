@@ -130,6 +130,51 @@ enum StyleEngine {
         return sum / Double(t.count).squareRoot()
     }
 
+    // MARK: Keine Gemälde
+
+    /// Begriffe in Titel/Tags, die auf Gemälde, Zeichnungen oder Illustrationen hindeuten.
+    /// Bewusst ohne Fotografie-Fachbegriffe wie „Rembrandt-Licht“, „Caravaggio“, „baroque“ oder „pastel“,
+    /// die oft gerade Fotos mit malerischer Lichtsetzung beschreiben.
+    static let paintingWords: Set<String> = [
+        "painting", "paintings", "painted", "oilpainting", "acrylic", "watercolor", "watercolour",
+        "aquarelle", "gouache", "tempera", "canvas", "fresco", "mural", "drawing", "drawings", "sketch",
+        "sketches", "sketchbook", "illustration", "illustrations", "illustrator", "artwork", "lithograph",
+        "etching", "engraving", "woodcut", "inkdrawing", "comic", "comics", "manga", "anime", "cartoon",
+        "conceptart", "digitalpainting", "speedpaint", "fanart",
+        "gemälde", "malerei", "ölgemälde", "aquarell", "zeichnung", "illustrationen", "leinwand",
+        "peinture", "pintura", "dipinto"
+    ]
+
+    /// Mehrwort-Begriffe (werden im zusammengefügten Text gesucht).
+    static let paintingPhrases: [String] = [
+        "oil on canvas", "oil painting", "digital painting", "concept art", "acrylic on", "on canvas",
+        "oil on panel", "pen and ink"
+    ]
+
+    /// Vision-Kennungen, die für gemalte/gezeichnete Bilder stehen – zur Laufzeit aus der Taxonomie ermittelt.
+    static let artIdentifiers: Set<String> = {
+        let keys = ["painting", "drawing", "sketch", "illustration", "cartoon", "anime", "comic",
+                    "watercolor", "canvas", "mural", "graffiti", "fresco", "art_print", "artwork"]
+        let all = (try? VNClassifyImageRequest().supportedIdentifiers()) ?? []
+        let found = all.filter { id in keys.contains { id.lowercased().contains($0) } }
+        return Set(found.isEmpty ? ["painting", "drawing", "sketch", "illustrations", "cartoon"] : found)
+    }()
+
+    /// Ab diesem Vision-Wert gilt ein Bild als Gemälde/Illustration.
+    static let artThreshold = 0.3
+
+    static func looksLikePainting(_ c: PhotoCandidate) -> Bool {
+        let w = words(of: ([c.title] + c.tags).joined(separator: " "))
+        if !w.isDisjoint(with: paintingWords) { return true }
+        let hay = ([c.title] + c.tags).joined(separator: " ").lowercased()
+        return paintingPhrases.contains { hay.contains($0) }
+    }
+
+    static func looksLikePainting(_ a: ImageAnalysis?) -> Bool {
+        guard let score = a?.artScore else { return false }
+        return score >= artThreshold
+    }
+
     /// Einzelwörter (klein geschrieben) – für Motiv-Erkennung über ganze Wörter.
     static func words(of text: String) -> Set<String> {
         Set(text.lowercased().components(separatedBy: CharacterSet.letters.inverted).filter { !$0.isEmpty })
@@ -140,6 +185,8 @@ enum StyleEngine {
     }
 
     static func isExcluded(_ c: PhotoCandidate, by collection: PhotoCollection) -> Bool {
+        // Grundsätzlich keine Gemälde, Zeichnungen oder Illustrationen.
+        if looksLikePainting(c) { return true }
         // Motiv: z. B. bei „Frau“ Fotos verwerfen, die klar als Mann beschrieben sind (und umgekehrt).
         let negatives = collection.subject.negativeWords
         if !negatives.isEmpty {
@@ -250,6 +297,10 @@ enum StyleEngine {
         let humanCount = (humans.results ?? []).filter { $0.confidence > 0.4 }.count
         let faceCount = (faces.results ?? []).filter { $0.confidence > 0.5 }.count
 
+        let artScore = (classify.results ?? [])
+            .filter { artIdentifiers.contains($0.identifier) }
+            .map { Double($0.confidence) }
+            .max() ?? 0
         let labels = (classify.results ?? [])
             .filter { $0.confidence > 0.3 }
             .sorted { $0.confidence > $1.confidence }
@@ -263,7 +314,8 @@ enum StyleEngine {
         let stats = colorStats(image)
         return ImageAnalysis(labels: Array(labels), featurePrint: printData,
                              luminance: stats.luminance, saturation: stats.saturation,
-                             personCount: max(humanCount, faceCount), dhash: dhash(image))
+                             personCount: max(humanCount, faceCount), dhash: dhash(image),
+                             artScore: artScore)
     }
 
     /// Differenz-Hash: 9×8 Graustufen, je Zeile Nachbarn vergleichen → 64 Bit.

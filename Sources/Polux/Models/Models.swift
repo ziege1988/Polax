@@ -81,6 +81,8 @@ struct ImageAnalysis: Codable, Hashable {
     var personCount: Int? = nil
     /// Wahrnehmungs-Hash (dHash, 64 Bit) zum Erkennen doppelter Bilder.
     var dhash: UInt64? = nil
+    /// Wie stark das Bild nach Gemälde/Zeichnung/Illustration aussieht (0…1, Vision).
+    var artScore: Double? = nil
 }
 
 /// Ein gelikter, lokal gespeicherter Eintrag einer Sammlung.
@@ -125,7 +127,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
          name: String,
          keywords: [String] = [],
          excludedWords: [String] = [],
-         sources: Set<SourceKind> = Set(SourceKind.allCases),
+         sources: Set<SourceKind> = Set(SourceKind.allCases).subtracting([.artstation]),
          allowNudity: Bool = true,
          darkBias: Double = 0.3,
          photosOnly: Bool = true,

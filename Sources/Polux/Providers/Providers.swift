@@ -90,7 +90,8 @@ struct OpenverseProvider: ImageProvider {
             .init(name: "page", value: String(page))
         ]
         if collection.allowNudity { items.append(.init(name: "mature", value: "true")) }
-        if collection.photosOnly { items.append(.init(name: "category", value: "photograph")) }
+        // Grundsätzlich nur Fotografien (keine Gemälde/Illustrationen aus Museen & Archiven).
+        items.append(.init(name: "category", value: "photograph"))
         comps.queryItems = items
         let resp = try await HTTP.json(Response.self, comps.url!)
         return resp.results.compactMap { r in
