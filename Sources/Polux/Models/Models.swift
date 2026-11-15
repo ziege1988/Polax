@@ -131,7 +131,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
          name: String,
          keywords: [String] = [],
          excludedWords: [String] = [],
-         sources: Set<SourceKind> = Set(SourceKind.allCases),
+         sources: Set<SourceKind> = Set(SourceKind.allCases).subtracting([.artstation]),
          allowNudity: Bool = true,
          darkBias: Double = 0.3,
          photosOnly: Bool = true,

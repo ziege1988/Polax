@@ -154,6 +154,23 @@ enum StyleEngine {
         "painter", "maler"
     ]
 
+    /// Gemalte/gezeichnete Digitalkunst & Illustration (auch KI). Ausnahme: Titel/Tags betonen Fotorealismus.
+    static let digitalArtWords: Set<String> = [
+        "illustration", "illustrations", "illustrated", "painting", "paintings",
+        "drawing", "drawings", "drawn", "sketch", "digitalpainting", "digitalillustration", "digitalart",
+        "conceptart", "characterdesign", "characterart", "fantasyart", "artnouveau", "arcimboldo", "mucha",
+        "klimt", "pinup", "vector", "stylized", "stylised", "lineart", "celshading", "artstation",
+        "artwork", "artworks", "procreate", "photoshoppainting", "speedpaint",
+        "fantasy", "portraitart", "popart", "psychedelic", "kunstwerk"
+    ]
+
+    /// Begriffe, die für ein fotorealistisches (auch KI-generiertes) Bild sprechen.
+    static let photorealWords: Set<String> = [
+        "photorealistic", "photoreal", "photorealism", "hyperrealistic", "hyperrealism", "realistic",
+        "photograph", "photography", "photo", "dslr", "mm", "filmgrain", "raw", "canon", "nikon", "sony",
+        "fujifilm", "leica", "bokeh", "lightroom", "fotografie"
+    ]
+
     /// Anime, Comic & Cartoon.
     static let animeWords: Set<String> = [
         "anime", "manga", "cartoon", "cartoons", "comic", "comics", "chibi", "kawaii", "waifu", "husbando",
@@ -188,24 +205,29 @@ enum StyleEngine {
         "pencil drawing", "charcoal drawing", "still life", "flat lay", "product photography",
         "food photography", "abstract art", "anime style", "anime girl", "manga style", "cartoon style",
         "national gallery", "old master", "alte meister", "art institute", "public domain art",
+        "art nouveau", "digital art", "digital painting", "concept art", "fantasy art", "character design",
+        "pin up", "pin-up", "trending on artstation", "digital illustration", "oil paint", "pop art",
         "vision of tondal", "last judgment", "garden of earthly"
     ]
 
     /// Vision-Kennungen für Gemälde/Zeichnung – greift bei allen Quellen außer Digitalkunst (ArtStation).
     static let paintIdentifiers: Set<String> = {
-        let keys = ["painting", "drawing", "sketch", "watercolor", "fresco", "mural", "canvas"]
+        let keys = ["painting", "drawing", "sketch", "watercolor", "fresco", "mural", "canvas", "illustration"]
         let all = (try? VNClassifyImageRequest().supportedIdentifiers()) ?? []
         let found = all.filter { id in keys.contains { id.lowercased().contains($0) } }
         return Set(found.isEmpty ? ["painting", "drawing"] : found)
     }()
 
-    static let paintThreshold = 0.35
+    static let paintThreshold = 0.28
 
-    /// Bilderkennung: Gemälde? Digitalkunst-Quellen (ArtStation) sind ausgenommen,
-    /// weil dort gemalt wirkende Bilder mit Personen ausdrücklich erlaubt sind.
+    /// Bilderkennung: wirkt das Bild gemalt/gezeichnet statt fotografiert? Gilt für alle Quellen –
+    /// erlaubt sind nur Fotos und fotorealistische (KI-)Bilder.
     static func looksLikeClassicPainting(_ c: PhotoCandidate, _ a: ImageAnalysis?) -> Bool {
-        guard c.source != .artstation, let score = a?.paintScore else { return false }
-        return score >= paintThreshold
+        guard let a else { return false }
+        if let score = a.paintScore, score >= paintThreshold { return true }
+        // Extrem gesättigte, „glatte“ Bilder sind fast immer digitale Malerei, kaum Fotos.
+        if a.saturation > 0.62 { return true }
+        return false
     }
 
     /// Vision-Kennungen für Cartoon/Anime/Comic – zur Laufzeit aus der Taxonomie ermittelt.
@@ -224,6 +246,10 @@ enum StyleEngine {
     static func looksLikePainting(_ c: PhotoCandidate) -> Bool {
         let w = words(of: ([c.title] + c.tags).joined(separator: " "))
         if !w.isDisjoint(with: paintingWords) || !w.isDisjoint(with: animeWords) || !w.isDisjoint(with: stillLifeWords) {
+            return true
+        }
+        // Digitale Malerei: nur erlaubt, wenn ausdrücklich fotorealistisch beschrieben.
+        if !w.isDisjoint(with: digitalArtWords) && w.isDisjoint(with: photorealWords) {
             return true
         }
         let hay = ([c.title] + c.tags).joined(separator: " ").lowercased()
@@ -313,6 +339,8 @@ enum StyleEngine {
             if let v = likedSim[i] { s += 1.4 * v }
             if let v = rejSim[i] { s -= 0.8 * v }
             if let a = analyses[c.id] {
+                s -= max(0, a.saturation - 0.45) * 2.0   // sehr bunte Bilder wirken selten fotografisch
+                if let p = a.paintScore { s -= p * 1.5 }
                 s += collection.darkBias * (0.5 - a.luminance) * 1.6
                 if let m = profile.meanLuminance { s -= abs(a.luminance - m) * 0.8 }
             } else {
