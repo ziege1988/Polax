@@ -147,10 +147,10 @@ enum StyleEngine {
         "gemälde", "malerei", "ölgemälde", "aquarell", "zeichnung", "leinwand",
         "peinture", "pintura", "dipinto",
         // Abfotografierte Kunstwerke / Alte Meister / Museen
-        "altar", "altarpiece", "triptych", "diptych", "polyptych", "retable", "retablo", "iconography",
+        "altarpiece", "triptych", "diptych", "polyptych", "retable", "retablo", "iconography",
         "bosch", "hieronymus", "bruegel", "brueghel", "dürer", "durer", "botticelli", "titian", "tizian",
         "museum", "museo", "musée", "musee", "louvre", "prado", "uffizi", "rijksmuseum", "mauritshuis",
-        "kunsthistorisches", "hermitage", "century", "jahrhundert", "siècle", "medieval", "mittelalter",
+        "kunsthistorisches", "hermitage",
         "painter", "maler"
     ]
 
@@ -161,7 +161,13 @@ enum StyleEngine {
         "conceptart", "characterdesign", "characterart", "fantasyart", "artnouveau", "arcimboldo", "mucha",
         "klimt", "pinup", "vector", "stylized", "stylised", "lineart", "celshading", "artstation",
         "artwork", "artworks", "procreate", "photoshoppainting", "speedpaint",
-        "fantasy", "portraitart", "popart", "psychedelic", "kunstwerk"
+        "portraitart", "popart", "psychedelic", "kunstwerk"
+    ]
+
+    /// Digitalkunst-Phrasen – gesperrt, außer Titel/Tags betonen Fotorealismus.
+    static let digitalArtPhrases: [String] = [
+        "art nouveau", "digital art", "digital painting", "concept art", "fantasy art", "character design",
+        "pin up", "pin-up", "trending on artstation", "digital illustration"
     ]
 
     /// Begriffe, die für ein fotorealistisches (auch KI-generiertes) Bild sprechen.
@@ -177,11 +183,20 @@ enum StyleEngine {
         "hentai", "ecchi", "vtuber", "toon", "pixar", "fanart", "otaku"
     ]
 
+    /// Vision-Motiv-Labels, die auf Menschen hindeuten, auch ohne erkanntes Gesicht.
+    static let personLabels: Set<String> = [
+        "people", "person", "adult", "woman", "man", "child", "wedding", "bride", "groom", "hand", "hands",
+        "finger", "portrait", "selfie", "tattoo", "skin", "dance", "couple"
+    ]
+
     /// Wörter, die auf Menschen im Bild hindeuten.
     static let peopleWords: Set<String> = [
         "portrait", "portraits", "people", "person", "model", "models", "woman", "women", "man", "men",
         "girl", "boy", "lady", "couple", "nude", "body", "face", "figure", "dancer", "bride", "selfie",
-        "fashion", "boudoir", "porträt", "frau", "mann", "akt", "modell"
+        "fashion", "boudoir", "porträt", "frau", "mann", "akt", "modell",
+        "wedding", "bridal", "groom", "engagement", "elopement", "kiss", "kissing", "lovers", "hands", "rings",
+        "tattoo", "tattoos", "tattooed", "makeup", "bodypaint", "nudeart", "artnude", "finearts",
+        "hochzeit", "braut", "bräutigam", "brautpaar", "paar", "hände", "verlobung"
     ]
 
     /// Motive ohne Menschen (Architektur, Landschaft, Stadt) – nur relevant, wenn Personen verlangt sind
@@ -205,8 +220,7 @@ enum StyleEngine {
         "pencil drawing", "charcoal drawing", "still life", "flat lay", "product photography",
         "food photography", "abstract art", "anime style", "anime girl", "manga style", "cartoon style",
         "national gallery", "old master", "alte meister", "art institute", "public domain art",
-        "art nouveau", "digital art", "digital painting", "concept art", "fantasy art", "character design",
-        "pin up", "pin-up", "trending on artstation", "digital illustration", "oil paint", "pop art",
+        "15th century", "16th century", "17th century", "oil paint", "pop art",
         "vision of tondal", "last judgment", "garden of earthly"
     ]
 
@@ -224,7 +238,12 @@ enum StyleEngine {
     /// erlaubt sind nur Fotos und fotorealistische (KI-)Bilder.
     static func looksLikeClassicPainting(_ c: PhotoCandidate, _ a: ImageAnalysis?) -> Bool {
         guard let a else { return false }
-        if let score = a.paintScore, score >= paintThreshold { return true }
+        if let score = a.paintScore {
+            // Sehr sicher → raus. Mittlere Sicherheit nur bei bunten, „glatten“ Bildern
+            // (dunkle, entsättigte Bodypaint-Akte werden sonst fälschlich als Malerei erkannt).
+            if score >= 0.5 { return true }
+            if score >= paintThreshold && a.saturation > 0.42 { return true }
+        }
         // Extrem gesättigte, „glatte“ Bilder sind fast immer digitale Malerei, kaum Fotos.
         if a.saturation > 0.62 { return true }
         return false
@@ -249,8 +268,10 @@ enum StyleEngine {
             return true
         }
         // Digitale Malerei: nur erlaubt, wenn ausdrücklich fotorealistisch beschrieben.
-        if !w.isDisjoint(with: digitalArtWords) && w.isDisjoint(with: photorealWords) {
-            return true
+        if w.isDisjoint(with: photorealWords) {
+            if !w.isDisjoint(with: digitalArtWords) { return true }
+            let text = ([c.title] + c.tags).joined(separator: " ").lowercased()
+            if digitalArtPhrases.contains(where: { text.contains($0) }) { return true }
         }
         let hay = ([c.title] + c.tags).joined(separator: " ").lowercased()
         return excludedPhrases.contains { hay.contains($0) }
@@ -265,8 +286,10 @@ enum StyleEngine {
     /// Ohne erkannte Person, obwohl die Sammlung Personen verlangt (Stillleben, Landschaft, Abstraktes)?
     static func lacksPeople(_ a: ImageAnalysis?, collection: PhotoCollection) -> Bool {
         guard collection.requirePeople || collection.subject != .any else { return false }
-        guard let n = a?.personCount else { return true }   // nicht prüfbar → lieber aussortieren
-        return n == 0
+        guard let a, let n = a.personCount else { return true }   // nicht prüfbar → lieber aussortieren
+        if n > 0 { return false }
+        // Detailaufnahmen ohne Gesicht/Körper (Hände mit Ringen, Anstecker) zählen über die Motiv-Labels.
+        return Set(a.labels).isDisjoint(with: personLabels)
     }
 
     /// Einzelwörter (klein geschrieben) – für Motiv-Erkennung über ganze Wörter.
@@ -313,10 +336,7 @@ enum StyleEngine {
         // Motiv-Prüfung am Bild: Bei Frau/Mann/Paar Fotos ohne erkannte Person aussortieren.
         var list = list
         if collection.subject != .any || collection.requirePeople {
-            let withPeople = list.filter { c in
-                guard let n = analyses[c.id]?.personCount else { return false }
-                return n > 0
-            }
+            let withPeople = list.filter { c in !lacksPeople(analyses[c.id], collection: collection) }
             if !withPeople.isEmpty { list = withPeople }
         }
         // Etwas Zufall, damit die Sammlung nicht in einer Stil-Blase festhängt.
@@ -340,7 +360,7 @@ enum StyleEngine {
             if let v = rejSim[i] { s -= 0.8 * v }
             if let a = analyses[c.id] {
                 s -= max(0, a.saturation - 0.45) * 2.0   // sehr bunte Bilder wirken selten fotografisch
-                if let p = a.paintScore { s -= p * 1.5 }
+                if let p = a.paintScore { s -= p * (a.saturation > 0.42 ? 1.5 : 0.6) }
                 s += collection.darkBias * (0.5 - a.luminance) * 1.6
                 if let m = profile.meanLuminance { s -= abs(a.luminance - m) * 0.8 }
             } else {

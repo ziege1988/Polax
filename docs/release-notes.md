@@ -1,6 +1,14 @@
-## Polux 1.0.11
+## Polux 1.0.12
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.12**
+- Filter an Dark-Fine-Art-, Akt-, Hochzeits- und Paarfotografie angepasst – weniger Fehlausschlüsse:
+  - Hochzeits-/Paarfotos vor Kirche, Burg, Torbogen oder im Wald bleiben erlaubt („wedding“, „groom“, „Hochzeit“ … zählen als Personenhinweis).
+  - Detailaufnahmen (Hände mit Ringen, Anstecker) zählen über die Bilderkennung als Bilder mit Personen.
+  - „altar“, „medieval“, „century“ und „fantasy“ sperren nicht mehr (Trauung, Kostüm- und Dark-Fantasy-Shootings).
+  - Dunkle, entsättigte Bodypaint-Akte werden nicht mehr fälschlich als Malerei erkannt.
+  - „digital art“ & Co. sind erlaubt, wenn Titel/Tags Fotorealismus betonen.
 
 **Neu in 1.0.11**
 - Nur noch Fotos und **fotorealistische** KI-Bilder: gemalte/gezeichnete Digitalkunst und Illustrationen werden aussortiert – über Titel/Tags (z. B. „digital art“, „art nouveau“, „fantasy art“), per Bilderkennung bei allen Quellen und über extrem gesättigte Farben.
@@ -53,7 +61,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.11.zip` herunterladen und entpacken.
+1. `Polux-1.0.12.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.
