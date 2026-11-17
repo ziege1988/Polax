@@ -38,8 +38,9 @@ struct SourceInfo {
                 summary: "Pinterest bietet keine öffentliche Suche. Öffentliche Boards werden pro Sammlung über ihren RSS-Feed eingebunden. Auch andere Bild-Feeds (z. B. Tumblr, Flickr-Gruppen) funktionieren.",
                 fields: [],
                 steps: [
-                    "Das gewünschte **öffentliche** Board auf pinterest.com im Browser öffnen.",
-                    "Die Adresse aus der Adresszeile kopieren, z. B. https://www.pinterest.com/nutzer/boardname/",
+                    "Das gewünschte **öffentliche Board** öffnen – nicht ein einzelnes Bild (Pin).",
+                    "**Browser:** Adresse aus der Adresszeile kopieren, z. B. https://www.pinterest.com/nutzer/boardname/ · **App:** im Board auf „Teilen“ → „Link kopieren“.",
+                    "Hast du nur den Link eines einzelnen Pins, versucht Polux automatisch, dessen Board zu finden.",
                     "Die Adresse unten bei der passenden Sammlung einfügen und mit „Hinzufügen“ bestätigen.",
                     "Mit „Testen“ prüfen, ob Bilder gefunden werden."
                 ],

@@ -418,7 +418,7 @@ struct RSSProvider: ImageProvider {
         var errorDescription: String? {
             switch self {
             case .singlePin:
-                return "Das ist ein einzelner Pin. Bitte die Adresse des Boards verwenden (pinterest.com/nutzer/boardname)."
+                return "Das ist ein einzelner Pin, sein Board ließ sich nicht automatisch finden. Bitte das Board öffnen und dessen Link kopieren (App: Board öffnen → Teilen → Link kopieren; Browser: Adresse pinterest.com/nutzer/boardname)."
             case .notAFeed:
                 return "Pinterest liefert für diese Adresse keinen Feed. Bitte die Board-Adresse verwenden (pinterest.com/nutzer/boardname)."
             case .invalid:
@@ -469,9 +469,46 @@ struct RSSProvider: ImageProvider {
             guard let finalURL = response.url?.absoluteString else { throw FeedProblem.invalid }
             s = finalURL
         }
-        if let comps = URLComponents(string: s), comps.path.hasPrefix("/pin/") { throw FeedProblem.singlePin }
+        if let comps = URLComponents(string: s), comps.path.hasPrefix("/pin/"), let pinURL = URL(string: s) {
+            // Einzelner Pin: das Board ermitteln, auf dem er gespeichert ist, und dessen Feed verwenden.
+            if let board = try? await boardOfPin(pinURL), let url = normalizedFeedURL(board) { return url }
+            throw FeedProblem.singlePin
+        }
         guard let url = normalizedFeedURL(s) else { throw FeedProblem.invalid }
         return url
+    }
+
+    /// Liest aus der Pin-Seite das Board („Gespeichert in …“), z. B. „https://www.pinterest.com/nutzer/board/“.
+    static func boardOfPin(_ pinURL: URL) async throws -> String? {
+        var req = URLRequest(url: pinURL, timeoutInterval: 20)
+        for (k, v) in browserHeaders { req.setValue(v, forHTTPHeaderField: k) }
+        req.setValue("text/html,application/xhtml+xml,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        let data = try await HTTP.data(req)
+        var html = String(decoding: data, as: UTF8.self)
+        html = html.replacingOccurrences(of: "\\/", with: "/").replacingOccurrences(of: "\\\"", with: "\"")
+
+        let blocked: Set<String> = ["pin", "search", "ideas", "today", "_tools", "business", "resource", "settings",
+                                    "login", "explore", "videos", "shopping", "_saved", "_created", "categories"]
+        func valid(_ path: String) -> String? {
+            let parts = path.split(separator: "/").map(String.init)
+            guard parts.count >= 2, !blocked.contains(parts[0]), !parts[1].hasPrefix("_") else { return nil }
+            return "https://www.pinterest.com/\(parts[0])/\(parts[1])/"
+        }
+        // 1) JSON-Daten der Seite: "board":{ … "url":"/nutzer/board/" … }
+        let patterns = [
+            #""board"\s*:\s*\{[^{}]{0,800}?"url"\s*:\s*"(/[^"/]+/[^"/]+/)""#,
+            #""url"\s*:\s*"(/[^"/]+/[^"/]+/)"[^{}]{0,800}?"type"\s*:\s*"board""#,
+            // 2) Sichtbarer Link „Gespeichert in …“
+            #"href="(/[^"/]+/[^"/]+/)"[^>]*data-test-id="board"#
+        ]
+        for p in patterns {
+            guard let re = try? NSRegularExpression(pattern: p, options: [.caseInsensitive]) else { continue }
+            let range = NSRange(html.startIndex..., in: html)
+            for m in re.matches(in: html, range: range) {
+                if let r = Range(m.range(at: 1), in: html), let board = valid(String(html[r])) { return board }
+            }
+        }
+        return nil
     }
 
     /// Lädt und liest einen einzelnen Feed.

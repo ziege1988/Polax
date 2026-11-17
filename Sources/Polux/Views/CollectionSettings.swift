@@ -346,11 +346,8 @@ struct FeedListEditor: View {
         let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return }
         let isShortLink = raw.lowercased().contains("pin.it/")
-        if raw.lowercased().contains("/pin/") {
-            error = "Das ist ein einzelner Pin. Bitte die Adresse des Boards einfügen (pinterest.com/nutzer/boardname)."
-            return
-        }
-        guard isShortLink || RSSProvider.normalizedFeedURL(raw) != nil else {
+        let isPin = raw.lowercased().contains("/pin/")
+        guard isShortLink || isPin || RSSProvider.normalizedFeedURL(raw) != nil else {
             error = "Diese Adresse wird nicht erkannt. Format: pinterest.com/nutzer/boardname"
             return
         }
