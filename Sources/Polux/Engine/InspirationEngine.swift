@@ -256,7 +256,8 @@ final class InspirationEngine: ObservableObject {
             var prof = profile(for: col)
             if let f = focus { prof = focused(prof, with: f) }
             let ranked = pool
-                .map { ($0, StyleEngine.prescore($0, profile: prof)) }
+                .map { ($0, StyleEngine.prescore($0, profile: prof)
+                        + 3 * StyleEngine.keywordMatch($0, analysis: nil, collection: col)) }
                 .sorted { $0.1 > $1.1 }
                 .map(\.0)
             var shortlist = Array(ranked.prefix(5))
@@ -267,6 +268,7 @@ final class InspirationEngine: ObservableObject {
             let likedHashes = col.likes.compactMap { $0.analysis?.dhash }
             let duplicates = shortlist.filter { c in
                 if StyleEngine.looksLikePainting(analyses[c.id]) { return true }
+                if StyleEngine.matchesExcludedWords(c, analysis: analyses[c.id], collection: col) { return true }
                 if StyleEngine.looksLikeClassicPainting(c, analyses[c.id]) { return true }
                 if StyleEngine.lacksPeople(analyses[c.id], collection: col) { return true }
                 guard let h = analyses[c.id]?.dhash else { return false }

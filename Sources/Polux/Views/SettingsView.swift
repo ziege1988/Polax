@@ -31,6 +31,8 @@ final class SettingsNavigation: ObservableObject {
     /// Quelle, deren Einrichtungs-Fenster gerade offen ist.
     @Published var setupSource: SourceKind?
     @Published var showNewCollection = false
+    /// Pinterest-Bereich der Sammlung hervorheben (nach oben holen und kurz aufleuchten lassen).
+    @Published var highlightFeeds = false
 
     func open(_ tab: SettingsTab, currentCollection: UUID) {
         switch tab {
@@ -43,7 +45,8 @@ final class SettingsNavigation: ObservableObject {
 
     func setUp(_ kind: SourceKind) { setupSource = kind }
 
-    func openCollection(_ id: UUID, tab: CollectionTab) {
+    func openCollection(_ id: UUID, tab: CollectionTab, highlightFeeds: Bool = false) {
+        self.highlightFeeds = highlightFeeds
         collectionTab = tab
         page = .collection(id)
     }

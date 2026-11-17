@@ -102,26 +102,94 @@ enum StyleEngine {
     // MARK: Suchanfragen
 
     /// Kombiniert eigene Schlagwörter mit gelernten Stil-Begriffen.
+    /// Suchanfragen bestehen nur aus den eigenen Schlagwörtern (plus ggf. „woman/man/couple“ aus „Person im Bild“).
+    /// Gelernte Stilbegriffe beeinflussen nur noch die Reihenfolge, nicht die Suche selbst.
     static func queries(for c: PhotoCollection, profile: StyleProfile, count: Int, preferLearned: Bool = false) -> [String] {
         var base = c.keywords.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if base.isEmpty { base = [c.name] }
-        let learnedChance = preferLearned ? 0.85 : 0.5
         var result: [String] = []
-        for _ in 0..<(count * 3) where result.count < count {
-            var q = base.randomElement()!
-            if !profile.learnedTerms.isEmpty, Double.random(in: 0..<1) < learnedChance,
-               let t = profile.learnedTerms.prefix(4).randomElement(), !q.lowercased().contains(t) {
-                q += " " + t
-            }
-            if c.requirePeople, c.subject == .any, words(of: q).isDisjoint(with: peopleWords) {
-                q += " portrait"
-            }
+        for kw in base.shuffled() where result.count < count {
+            var q = kw
             if let term = c.subject.searchTerm, !words(of: q).contains(where: c.subject.positiveWords.contains) {
                 q += " " + term
             }
             if !result.contains(q) { result.append(q) }
         }
         return result.isEmpty ? [base[0]] : result
+    }
+
+    // MARK: Schlagwort-Treffer (unscharf)
+
+    /// Bedeutungstragende Wörter eines Schlagworts.
+    static func keywordTokens(_ keyword: String) -> [String] {
+        let fill: Set<String> = ["the", "and", "with", "for", "of", "in", "a", "an", "und", "mit", "der", "die", "das"]
+        return Array(words(of: keyword)).filter { $0.count >= 3 && !fill.contains($0) }
+    }
+
+    /// Zwei Wörter gelten als gleich bei Plural/Wortstamm („goth“ ~ „gothic“) oder einem Tippfehler.
+    static func fuzzyEqual(_ a: String, _ b: String) -> Bool {
+        if a == b { return true }
+        let short = a.count <= b.count ? a : b, long = a.count <= b.count ? b : a
+        if short.count >= 4 && long.hasPrefix(short) { return true }
+        if short.count >= 5 && long.count - short.count <= 1 && levenshtein(a, b) <= 1 { return true }
+        return false
+    }
+
+    private static func levenshtein(_ a: String, _ b: String) -> Int {
+        let x = Array(a), y = Array(b)
+        var prev = Array(0...y.count)
+        for i in 1...max(x.count, 1) where !x.isEmpty {
+            var cur = [i] + Array(repeating: 0, count: y.count)
+            for j in 1...max(y.count, 1) where !y.isEmpty {
+                cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1))
+            }
+            prev = cur
+        }
+        return prev[y.count]
+    }
+
+    /// Wie gut passt ein Bild zum besten Schlagwort der Sammlung? 0…1 (Anteil getroffener Wörter).
+    static func keywordMatch(_ c: PhotoCandidate, analysis: ImageAnalysis?, collection: PhotoCollection) -> Double {
+        let keywords = collection.keywords.filter { !keywordTokens($0).isEmpty }
+        guard !keywords.isEmpty else { return 1 }
+        var hay = candidateWords(c)
+        for l in analysis?.labels ?? [] { hay.formUnion(words(of: l)) }
+        guard !hay.isEmpty else { return 0 }
+        var best = 0.0
+        for kw in keywords {
+            let toks = keywordTokens(kw)
+            let hit = toks.filter { t in hay.contains { fuzzyEqual(t, $0) } }.count
+            best = max(best, Double(hit) / Double(toks.count))
+        }
+        return best
+    }
+
+    /// Mindestanteil – bei „editorial gothic“ genügt ein Treffer, bei vier Wörtern zwei.
+    static let keywordThreshold = 0.5
+
+    /// Zu wenig Beschreibung, um sicher zu prüfen? Dann entscheidet die Bewertung statt eines harten Filters.
+    static func hasEnoughMetadata(_ c: PhotoCandidate) -> Bool {
+        candidateWords(c).filter { $0.count >= 3 }.count >= 3
+    }
+
+    /// Ausschlusswörter: Einzelwörter als ganzes Wort (unscharf), Wortgruppen als Phrase. Prüft auch Motiv-Labels.
+    static func matchesExcludedWords(_ c: PhotoCandidate, analysis: ImageAnalysis?, collection: PhotoCollection) -> Bool {
+        let entries = collection.excludedWords.map(normalizeTag).filter { !$0.isEmpty }
+        guard !entries.isEmpty else { return false }
+        var hay = candidateWords(c)
+        for l in analysis?.labels ?? [] { hay.formUnion(words(of: l)) }
+        let text = normalizeTag(([c.title] + c.tags + (analysis?.labels ?? [])).joined(separator: " "))
+        for e in entries {
+            let toks = Array(words(of: e))
+            if toks.count > 1 {
+                if text.contains(e) { return true }
+            } else if let t = toks.first {
+                if t.count <= 3 ? hay.contains(t) || hay.contains(t + "s") : hay.contains(where: { fuzzyEqual(t, $0) }) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     // MARK: Bewertung
@@ -316,10 +384,13 @@ enum StyleEngine {
             let hasPositive = !w.isDisjoint(with: collection.subject.positiveWords)
             if hasNegative && !hasPositive { return true }
         }
-        let words = collection.excludedWords.map(normalizeTag).filter { !$0.isEmpty }
-        guard !words.isEmpty else { return false }
-        let hay = normalizeTag(([c.title] + c.tags).joined(separator: " "))
-        return words.contains { hay.contains($0) }
+        if matchesExcludedWords(c, analysis: nil, collection: collection) { return true }
+        // Nur Treffer zu den eigenen Schlagwörtern (Pinterest-Boards sind selbst kuratiert und ausgenommen).
+        if c.source != .rss, !collection.keywords.isEmpty, hasEnoughMetadata(c),
+           keywordMatch(c, analysis: nil, collection: collection) < keywordThreshold {
+            return true
+        }
+        return false
     }
 
     /// Bonus, wenn ein Kandidat ausdrücklich zum gewünschten Motiv passt.
@@ -349,6 +420,7 @@ enum StyleEngine {
         var best: (PhotoCandidate, Double)?
         for (i, c) in list.enumerated() {
             var s = pre[i] + subjectBonus(c, collection: collection)
+            s += 2.5 * keywordMatch(c, analysis: analyses[c.id], collection: collection)
             if let n = analyses[c.id]?.personCount {
                 switch collection.subject {
                 case .female, .male: s += n == 1 ? 0.4 : (n > 2 ? -0.4 : 0)

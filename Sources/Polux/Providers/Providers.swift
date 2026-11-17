@@ -406,28 +406,92 @@ struct ArtStationProvider: ImageProvider {
 struct RSSProvider: ImageProvider {
     let kind = SourceKind.rss
 
-    /// Wandelt eine Pinterest-Board-Adresse in die RSS-Adresse um.
+    /// Browser-ähnliche Kopfzeilen – Pinterest liefert Feeds an unbekannte Programme teils nicht aus.
+    static let browserHeaders: [String: String] = [
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+        "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.5",
+        "Accept-Language": "de-DE,de;q=0.9,en;q=0.8"
+    ]
+
+    enum FeedProblem: LocalizedError {
+        case singlePin, notAFeed, invalid
+        var errorDescription: String? {
+            switch self {
+            case .singlePin:
+                return "Das ist ein einzelner Pin. Bitte die Adresse des Boards verwenden (pinterest.com/nutzer/boardname)."
+            case .notAFeed:
+                return "Pinterest liefert für diese Adresse keinen Feed. Bitte die Board-Adresse verwenden (pinterest.com/nutzer/boardname)."
+            case .invalid:
+                return "Ungültige Adresse."
+            }
+        }
+    }
+
+    static func isPinterest(_ host: String) -> Bool {
+        host == "pin.it" || host.contains("pinterest.")
+    }
+
+    /// Wandelt eine Pinterest-Adresse (auch pinterest.de, de.pinterest.com, Profil, Board-Abschnitt)
+    /// in die RSS-Adresse um. Andere Feeds bleiben unverändert. Kurzlinks (pin.it) löst `resolve` auf.
     static func normalizedFeedURL(_ raw: String) -> URL? {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
         if !s.contains("://") { s = "https://" + s }
-        if s.contains("pinterest."), !s.hasSuffix(".rss") {
-            if let q = s.firstIndex(of: "?") { s = String(s[..<q]) }
-            while s.hasSuffix("/") { s.removeLast() }
-            s += ".rss"
+        guard var comps = URLComponents(string: s), let host = comps.host?.lowercased() else { return nil }
+        guard isPinterest(host), host != "pin.it" else { return HTTP.secureURL(s) }
+
+        var parts = comps.path.split(separator: "/").map(String.init).filter { !$0.isEmpty }
+        if parts.first == "pin" { return nil }                              // einzelner Pin
+        if let last = parts.last, last.hasSuffix(".rss") {
+            parts[parts.count - 1] = String(last.dropLast(4))
         }
-        return HTTP.secureURL(s)
+        parts.removeAll { ["_saved", "_created", "_shop", "_profile", "pins", "boards"].contains($0) }
+        comps.scheme = "https"
+        comps.host = "www.pinterest.com"                                   // Länderdomains → .com
+        comps.query = nil
+        comps.fragment = nil
+        switch parts.count {
+        case 0: return nil
+        case 1: comps.path = "/\(parts[0])/feed.rss"                        // Profil → alle Pins
+        default: comps.path = "/\(parts[0])/\(parts[1]).rss"                // Board (Abschnitte → ganzes Board)
+        }
+        return comps.url
+    }
+
+    /// Löst Kurzlinks (pin.it) auf und liefert die Feed-Adresse.
+    static func resolve(_ raw: String) async throws -> URL {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !s.contains("://") { s = "https://" + s }
+        if let host = URL(string: s)?.host?.lowercased(), host == "pin.it", let short = URL(string: s) {
+            var req = URLRequest(url: short, timeoutInterval: 20)
+            for (k, v) in browserHeaders { req.setValue(v, forHTTPHeaderField: k) }
+            let (_, response) = try await HTTP.session.data(for: req)
+            guard let finalURL = response.url?.absoluteString else { throw FeedProblem.invalid }
+            s = finalURL
+        }
+        if let comps = URLComponents(string: s), comps.path.hasPrefix("/pin/") { throw FeedProblem.singlePin }
+        guard let url = normalizedFeedURL(s) else { throw FeedProblem.invalid }
+        return url
+    }
+
+    /// Lädt und liest einen einzelnen Feed.
+    static func fetchItems(_ raw: String) async throws -> (feed: URL, items: [RSSParser.Item]) {
+        let feed = try await resolve(raw)
+        let headers = isPinterest(feed.host ?? "") ? browserHeaders : ["Accept": browserHeaders["Accept"]!]
+        let data = try await HTTP.get(feed, headers: headers)
+        let head = String(decoding: data.prefix(400), as: UTF8.self).lowercased()
+        if head.contains("<!doctype html") || head.contains("<html") { throw FeedProblem.notAFeed }
+        return (feed, RSSParser.parse(data))
     }
 
     func search(query: String, collection: PhotoCollection, page: Int) async throws -> [PhotoCandidate] {
-        let feeds = collection.feeds.compactMap(Self.normalizedFeedURL).prefix(8)
+        let feeds = collection.feeds.prefix(8)
         guard !feeds.isEmpty else { return [] }
         var all: [PhotoCandidate] = []
         var lastError: Error?
-        for feed in feeds {
+        for raw in feeds {
             do {
-                let data = try await HTTP.get(feed, headers: ["Accept": "application/rss+xml, application/atom+xml, */*"])
-                let items = RSSParser.parse(data)
+                let (feed, items) = try await Self.fetchItems(raw)
                 all += items.compactMap { candidate(from: $0, feed: feed, query: query) }
             } catch {
                 lastError = error

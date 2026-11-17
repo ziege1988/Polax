@@ -40,7 +40,7 @@ struct SourceInfo {
                 steps: [
                     "Das gewünschte **öffentliche** Board auf pinterest.com im Browser öffnen.",
                     "Die Adresse aus der Adresszeile kopieren, z. B. https://www.pinterest.com/nutzer/boardname/",
-                    "Unten bei der passenden Sammlung auf „Boards bearbeiten“ klicken und die Adresse einfügen.",
+                    "Die Adresse unten bei der passenden Sammlung einfügen und mit „Hinzufügen“ bestätigen.",
                     "Mit „Testen“ prüfen, ob Bilder gefunden werden."
                 ],
                 link: "https://www.pinterest.com", linkTitle: "pinterest.com öffnen", note: nil)
@@ -196,7 +196,7 @@ struct SourceCard: View {
     }
 
     private var buttonTitle: String {
-        if kind == .rss { return "Anleitung" }
+        if kind == .rss { return "Boards eintragen …" }
         if tester.status(kind) == .missing { return "Einrichten …" }
         return "Details"
     }
@@ -289,18 +289,11 @@ struct SourceDetailView: View {
             }
 
             if kind == .rss {
-                Section("Boards je Sammlung") {
-                    ForEach(store.collections) { c in
-                        HStack {
-                            Text(c.name)
-                            Spacer()
-                            Text(c.feeds.isEmpty ? "keine Boards" : "\(c.feeds.count) Board\(c.feeds.count == 1 ? "" : "s")")
-                                .foregroundColor(.secondary)
-                            Button("Boards bearbeiten") {
-                                SettingsNavigation.shared.setupSource = nil
-                                SettingsNavigation.shared.openCollection(c.id, tab: .sources)
-                            }
-                        }
+                ForEach(store.collections) { c in
+                    Section {
+                        FeedListEditor(collectionID: c.id)
+                    } header: {
+                        Text("Boards für „\(c.name)“")
                     }
                 }
             } else {

@@ -58,16 +58,15 @@ final class ConnectionTester: ObservableObject {
 
     /// Testet eine einzelne Feed-Adresse (Pinterest-Board oder RSS).
     static func testFeed(_ raw: String) async -> Status {
-        guard RSSProvider.normalizedFeedURL(raw) != nil else {
-            return .failed("Ungültige Adresse")
-        }
-        var probe = PhotoCollection(name: "Feedtest")
-        probe.feeds = [raw]
         do {
-            let items = try await RSSProvider().search(query: "", collection: probe, page: 1)
-            return items.isEmpty
-                ? .failed("Feed erreichbar, aber ohne Bilder – ist das Board öffentlich?")
-                : .ok("\(items.count) Bilder gefunden")
+            let (_, items) = try await RSSProvider.fetchItems(raw)
+            let withImages = items.filter { !$0.mediaURLs.isEmpty || RSSParser.firstImage(in: $0.description) != nil }
+            if items.isEmpty {
+                return .failed("Feed ist leer – ist das Board öffentlich und enthält es Pins?")
+            }
+            return withImages.isEmpty
+                ? .failed("Feed gefunden, aber ohne Bilder.")
+                : .ok("\(withImages.count) Bilder gefunden")
         } catch {
             return .failed(describe(error, .rss))
         }
@@ -93,11 +92,13 @@ final class ConnectionTester: ObservableObject {
                     return "ArtStation blockiert die Anfrage gerade (HTTP \(code)). Später erneut versuchen."
                 }
                 if kind == .rss {
-                    return "Zugriff verweigert (HTTP \(code)) – ist das Board öffentlich?"
+                    return "Pinterest verweigert den Zugriff (HTTP \(code)). Ist das Board öffentlich (nicht „geheim“)?"
                 }
                 return "Schlüssel ungültig oder noch nicht freigeschaltet (HTTP \(code))."
             case .http(let code, _) where code == 404:
-                return kind == .rss ? "Feed nicht gefunden (HTTP 404) – Adresse prüfen." : "Schnittstelle nicht gefunden (HTTP 404)."
+                return kind == .rss
+                    ? "Board nicht gefunden (HTTP 404) – Adresse prüfen, Format: pinterest.com/nutzer/boardname"
+                    : "Schnittstelle nicht gefunden (HTTP 404)."
             case .http(let code, _) where code == 429:
                 return "Anfragelimit erreicht – in einer Stunde erneut versuchen."
             case .http(let code, _) where code >= 500:

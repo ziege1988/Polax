@@ -1,6 +1,12 @@
-## Polux 1.0.12
+## Polux 1.0.13
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.13**
+- **Schlagwörter haben Vorrang:** Gesucht wird nur noch nach den eigenen Schlagwörtern (keine automatisch angehängten Begriffe mehr). Treffer müssen zum Schlagwort passen – unscharf: Wortstamm, Plural und kleine Tippfehler zählen mit (bei „editorial gothic“ genügt eines der Wörter). Passende Bilder werden zuerst gezeigt.
+- **Ausschlusswörter** greifen als ganze Wörter („man“ schließt nicht mehr „woman“ aus), erkennen Varianten und prüfen auch die Bilderkennung.
+- **Pinterest:** Länder-Adressen (pinterest.de), Kurzlinks (pin.it), Profile und Board-Abschnitte werden automatisch in die richtige Feed-Adresse umgewandelt; Abruf wie ein Browser; verständliche Fehlermeldungen.
+- **Boards eintragen** geht jetzt direkt im Pinterest-Fenster je Sammlung. Wird Pinterest in einer Sammlung eingeschaltet, rückt das Eingabefeld nach oben und leuchtet kurz auf.
 
 **Neu in 1.0.12**
 - Filter an Dark-Fine-Art-, Akt-, Hochzeits- und Paarfotografie angepasst – weniger Fehlausschlüsse:
@@ -61,7 +67,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.12.zip` herunterladen und entpacken.
+1. `Polux-1.0.13.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

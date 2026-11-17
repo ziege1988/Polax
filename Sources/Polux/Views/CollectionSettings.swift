@@ -128,10 +128,13 @@ private struct CollectionSearchTab: View {
 private struct CollectionSourcesTab: View {
     @Binding var collection: PhotoCollection
     @ObservedObject private var tester = ConnectionTester.shared
-    @State private var newFeed = ""
+    @ObservedObject private var nav = SettingsNavigation.shared
 
     var body: some View {
+        let highlight = nav.highlightFeeds
         Form {
+            if highlight { pinterestSection(highlight: true) }
+
             Section {
                 ForEach(SourceKind.menuOrder.filter { $0 != .rss }) { kind in
                     sourceRow(kind)
@@ -143,41 +146,40 @@ private struct CollectionSourcesTab: View {
                     .font(.caption).foregroundColor(.secondary)
             }
 
-            Section {
-                Toggle(isOn: sourceBinding(.rss)) {
-                    Label("Pinterest-Boards & RSS-Feeds verwenden", systemImage: SourceKind.rss.icon)
-                }
-                ForEach(collection.feeds, id: \.self) { feed in
-                    HStack {
-                        Text(feed).lineLimit(1).truncationMode(.middle)
-                        Spacer()
-                        FeedTestButton(feed: feed)
-                        Button {
-                            collection.feeds.removeAll { $0 == feed }
-                        } label: { Image(systemName: "minus.circle") }
-                        .buttonStyle(.borderless)
-                        .help("Board entfernen")
-                    }
-                }
-                HStack {
-                    TextField("Board-Adresse", text: $newFeed, prompt: Text("https://www.pinterest.com/nutzer/board/"))
-                        .onSubmit(addFeed)
-                    Button("Hinzufügen", action: addFeed)
-                        .disabled(newFeed.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            } header: {
-                Text("Pinterest-Boards")
-            } footer: {
-                HStack(spacing: 4) {
-                    Text("Nur öffentliche Boards. Auch andere Bild-Feeds (Tumblr, Flickr-Gruppen) funktionieren.")
-                    Button("Anleitung") { SettingsNavigation.shared.setUp(.rss) }
-                        .buttonStyle(.link)
-                }
-                .font(.caption)
-                .foregroundColor(.secondary)
-            }
+            if !highlight { pinterestSection(highlight: false) }
         }
         .formStyle(.grouped)
+        .onAppear {
+            if highlight {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 4) { nav.highlightFeeds = false }
+            }
+        }
+    }
+
+    private func pinterestSection(highlight: Bool) -> some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { collection.sources.contains(.rss) },
+                set: { on in
+                    if on { collection.sources.insert(.rss) } else { collection.sources.remove(.rss) }
+                    // Eingeschaltet, aber noch kein Board? Eingabefeld zeigen und hervorheben.
+                    if on && collection.feeds.isEmpty { nav.highlightFeeds = true }
+                }
+            )) {
+                Label("Pinterest-Boards & RSS-Feeds verwenden", systemImage: SourceKind.rss.icon)
+            }
+            FeedListEditor(collectionID: collection.id, highlight: highlight)
+        } header: {
+            Text("Pinterest-Boards")
+        } footer: {
+            HStack(spacing: 4) {
+                Text("Nur öffentliche Boards. Auch andere Bild-Feeds (Tumblr, Flickr-Gruppen) funktionieren.")
+                Button("Anleitung") { SettingsNavigation.shared.setUp(.rss) }
+                    .buttonStyle(.link)
+            }
+            .font(.caption)
+            .foregroundColor(.secondary)
+        }
     }
 
     private func sourceRow(_ kind: SourceKind) -> some View {
@@ -215,13 +217,6 @@ private struct CollectionSourcesTab: View {
         )
     }
 
-    private func addFeed() {
-        let f = newFeed.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !f.isEmpty, RSSProvider.normalizedFeedURL(f) != nil else { return }
-        if !collection.feeds.contains(f) { collection.feeds.append(f) }
-        collection.sources.insert(.rss)
-        newFeed = ""
-    }
 }
 
 // MARK: Reiter „Stil & Fotos“
@@ -287,5 +282,83 @@ private struct CollectionStyleTab: View {
         } message: {
             Text("„\(collection.name)“ und alle gelikten Fotos darin werden entfernt.")
         }
+    }
+}
+
+/// Liste der Pinterest-Boards/Feeds einer Sammlung mit Eingabefeld, Test und optionalem Aufleuchten.
+struct FeedListEditor: View {
+    let collectionID: UUID
+    var highlight: Bool = false
+
+    @EnvironmentObject var store: LibraryStore
+    @State private var input = ""
+    @State private var error: String?
+    @State private var glow = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let feeds = store.collection(collectionID)?.feeds ?? []
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(feeds, id: \.self) { feed in
+                HStack(spacing: 8) {
+                    Image(systemName: "pin.fill").foregroundColor(.secondary).font(.caption)
+                    Text(feed).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    FeedTestButton(feed: feed)
+                    Button {
+                        store.mutate(collectionID) { c in c.feeds.removeAll { $0 == feed } }
+                    } label: { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Board entfernen")
+                }
+            }
+            HStack(spacing: 8) {
+                TextField("Board-Adresse", text: $input,
+                          prompt: Text("Board-Adresse einfügen, z. B. pinterest.com/nutzer/boardname"))
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                    .focused($focused)
+                    .onSubmit(add)
+                Button("Hinzufügen", action: add)
+                    .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            if let error {
+                Text(error).font(.caption).foregroundColor(.red)
+            }
+        }
+        .padding(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.orange, lineWidth: 2.5)
+                .opacity(glow ? 1 : 0)
+        )
+        .onAppear {
+            guard highlight else { return }
+            focused = true
+            withAnimation(.easeInOut(duration: 0.45).repeatCount(6, autoreverses: true)) { glow = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) {
+                withAnimation(.easeOut(duration: 0.4)) { glow = false }
+            }
+        }
+    }
+
+    private func add() {
+        let raw = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+        let isShortLink = raw.lowercased().contains("pin.it/")
+        if raw.lowercased().contains("/pin/") {
+            error = "Das ist ein einzelner Pin. Bitte die Adresse des Boards einfügen (pinterest.com/nutzer/boardname)."
+            return
+        }
+        guard isShortLink || RSSProvider.normalizedFeedURL(raw) != nil else {
+            error = "Diese Adresse wird nicht erkannt. Format: pinterest.com/nutzer/boardname"
+            return
+        }
+        store.mutate(collectionID) { c in
+            if !c.feeds.contains(raw) { c.feeds.append(raw) }
+            c.sources.insert(.rss)
+        }
+        input = ""
+        error = nil
     }
 }
