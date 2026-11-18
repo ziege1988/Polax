@@ -176,4 +176,12 @@ final class PinterestAndUpdateTests: XCTestCase {
         XCTAssertFalse(UpdateChecker.isVersion("1.0.9", newerThan: "1.0.10"))
         XCTAssertFalse(UpdateChecker.isVersion("1.0.16", newerThan: "1.0.16"))
     }
+
+    func testDeviantArtCredentialsAreCleaned() {
+        XCTAssertEqual(DeviantArtAuth.clean(" 12345 \n", digitsOnly: true), "12345")
+        XCTAssertEqual(DeviantArtAuth.clean("client_id: 12345", digitsOnly: true), "12345")
+        XCTAssertEqual(DeviantArtAuth.clean("abcdef0123456789abcdef0123456789\n", digitsOnly: false),
+                       "abcdef0123456789abcdef0123456789")
+        XCTAssertEqual(DeviantArtAuth.clean("client_secret: \"abc123\"", digitsOnly: false), "abc123")
+    }
 }

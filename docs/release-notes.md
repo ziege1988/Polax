@@ -1,6 +1,10 @@
-## Polux 1.0.17
+## Polux 1.0.18
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.18**
+- DeviantArt-Anmeldung robuster: drei von DeviantArt unterstützte Anmeldearten werden nacheinander versucht; eingefügte Werte werden bereinigt (Leerzeichen, Zeilenumbrüche, Beschriftungen wie „client_id:“).
+- Klare Fehlermeldung mit der Begründung von DeviantArt – und Unterscheidung, ob die Anmeldung oder erst der Bildabruf abgelehnt wurde.
 
 **Neu in 1.0.17**
 - **Filterprotokoll** (Sammlung → Reiter „Protokoll“): gefundene, passende, geprüfte und gezeigte Fotos, die häufigsten Gründe fürs Aussortieren, die letzten Suchen je Quelle und konkrete Tipps.
@@ -90,7 +94,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.17.zip` herunterladen und entpacken.
+1. `Polux-1.0.18.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

@@ -277,6 +277,7 @@ actor DeviantArtAuth {
     private struct TokenResponse: Decodable {
         let access_token: String?
         let expires_in: Double?
+        let error: String?
         let error_description: String?
     }
 
@@ -285,29 +286,80 @@ actor DeviantArtAuth {
         expiry = .distantPast
     }
 
+    /// Bereinigt eingefügte Werte: Leerzeichen, Zeilenumbrüche, Beschriftungen wie „client_id: 12345“.
+    static func clean(_ raw: String, digitsOnly: Bool) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if digitsOnly {
+            // client_id ist eine Zahl – längste Ziffernfolge übernehmen.
+            let runs = trimmed.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }
+            return runs.max(by: { $0.count < $1.count }) ?? trimmed
+        }
+        // client_secret: letztes „Wort“ ohne Leer- und Anführungszeichen
+        let parts = trimmed.components(separatedBy: CharacterSet(charactersIn: " \t\n\r:=\"'"))
+            .filter { !$0.isEmpty }
+        return parts.last ?? trimmed
+    }
+
     func accessToken() async throws -> String {
         if let t = token, Date() < expiry { return t }
-        guard let id = Keychain.get(.deviantartID), let secret = Keychain.get(.deviantartSecret) else {
+        guard let rawID = Keychain.get(.deviantartID), let rawSecret = Keychain.get(.deviantartSecret) else {
             throw ProviderError.missingCredentials(.deviantart)
         }
-        var req = URLRequest(url: URL(string: "https://www.deviantart.com/oauth2/token")!)
-        req.httpMethod = "POST"
-        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let id = Self.clean(rawID, digitsOnly: true)
+        let secret = Self.clean(rawSecret, digitsOnly: false)
+
+        // DeviantArt erlaubt mehrere Anmeldearten – nacheinander probieren.
+        let tokenURL = URL(string: "https://www.deviantart.com/oauth2/token")!
         var form = URLComponents()
         form.queryItems = [
             .init(name: "grant_type", value: "client_credentials"),
             .init(name: "client_id", value: id),
             .init(name: "client_secret", value: secret)
         ]
-        req.httpBody = form.percentEncodedQuery?.data(using: .utf8)
-        let data = try await HTTP.data(req)
-        let resp = try JSONDecoder().decode(TokenResponse.self, from: data)
-        guard let t = resp.access_token else {
-            throw ProviderError.api("DeviantArt: \(resp.error_description ?? "Anmeldung fehlgeschlagen")")
+        let body = form.percentEncodedQuery ?? ""
+
+        var post = URLRequest(url: tokenURL, timeoutInterval: 20)
+        post.httpMethod = "POST"
+        post.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        post.httpBody = body.data(using: .utf8)
+
+        var basic = URLRequest(url: tokenURL, timeoutInterval: 20)
+        basic.httpMethod = "POST"
+        basic.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        basic.setValue("Basic " + Data("\(id):\(secret)".utf8).base64EncodedString(), forHTTPHeaderField: "Authorization")
+        basic.httpBody = "grant_type=client_credentials".data(using: .utf8)
+
+        let get = URLRequest(url: URL(string: tokenURL.absoluteString + "?" + body)!, timeoutInterval: 20)
+
+        var lastProblem = "Anmeldung fehlgeschlagen"
+        for var req in [post, basic, get] {
+            req.setValue("application/json", forHTTPHeaderField: "Accept")
+            let (data, response) = try await HTTP.session.data(for: req)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let resp = try? JSONDecoder().decode(TokenResponse.self, from: data)
+            if (200..<300).contains(code), let t = resp?.access_token {
+                token = t
+                expiry = Date().addingTimeInterval((resp?.expires_in ?? 3600) - 120)
+                return t
+            }
+            lastProblem = Self.explain(error: resp?.error, description: resp?.error_description, code: code)
+            guard code == 400 || code == 401 else { break }   // andere Fehler: nicht weiter probieren
         }
-        token = t
-        expiry = Date().addingTimeInterval((resp.expires_in ?? 3600) - 120)
-        return t
+        throw ProviderError.api("DeviantArt-Anmeldung abgelehnt: " + lastProblem)
+    }
+
+    static func explain(error: String?, description: String?, code: Int) -> String {
+        switch error {
+        case "invalid_client":
+            return "client_id und client_secret passen nicht zusammen. Bitte beide Werte unter deviantart.com/developers/apps neu kopieren (client_id = Zahl, client_secret = lange Zeichenfolge)."
+        case "unauthorized_client":
+            return "Die App darf sich so nicht anmelden. In den App-Einstellungen bei DeviantArt prüfen, ob die App veröffentlicht ist."
+        case "invalid_request":
+            return "Unvollständige Anfrage (\(description ?? "fehlende Angaben"))."
+        default:
+            if let d = description, !d.isEmpty { return "\(d) (HTTP \(code))" }
+            return "HTTP \(code)"
+        }
     }
 }
 
@@ -343,7 +395,19 @@ struct DeviantArtProvider: ImageProvider {
             .init(name: "mature_content", value: collection.allowNudity ? "true" : "false"),
             .init(name: "access_token", value: token)
         ]
-        let resp = try await HTTP.json(Response.self, comps.url!)
+        var req = URLRequest(url: comps.url!, timeoutInterval: 25)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await HTTP.session.data(for: req)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else {
+            struct Err: Decodable { let error: String?; let error_description: String? }
+            let e = try? JSONDecoder().decode(Err.self, from: data)
+            if code == 401 || code == 403 { await DeviantArtAuth.shared.reset() }
+            throw ProviderError.api("DeviantArt: Anmeldung ok, aber Abruf abgelehnt – "
+                                    + (e?.error_description ?? "HTTP \(code)"))
+        }
+        let resp = try JSONDecoder().decode(Response.self, from: data)
         return resp.results.compactMap { r in
             if !collection.allowNudity, r.is_mature == true { return nil }
             guard let img = HTTP.secureURL(r.content?.src ?? r.preview?.src) else { return nil }
