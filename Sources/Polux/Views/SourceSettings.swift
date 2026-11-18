@@ -218,6 +218,14 @@ struct StatusPill: View {
             .padding(.vertical, 3)
             .background(Capsule().fill(color.opacity(0.12)))
             .lineLimit(1)
+            .help(checkedText)
+    }
+
+    private var checkedText: String {
+        guard let d = tester.lastChecked[kind] else { return "Noch nicht geprüft" }
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "de_DE")
+        return "Zuletzt geprüft " + f.localizedString(for: d, relativeTo: Date())
     }
 
     private func describe() -> (String, Color, String) {
@@ -231,7 +239,7 @@ struct StatusPill: View {
         case .failed: return ("Fehler", .red, "exclamationmark.triangle.fill")
         case .missing: return ("Schlüssel fehlt", .orange, "key")
         case .testing: return ("Teste …", .secondary, "circle.dotted")
-        case .unknown: return (kind.needsCredentials ? "Eingerichtet" : "Bereit", .secondary, "circle")
+        case .unknown: return ("Noch nicht geprüft", .secondary, "circle")
         }
     }
 }

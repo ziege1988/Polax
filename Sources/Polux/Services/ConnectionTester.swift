@@ -14,8 +14,50 @@ final class ConnectionTester: ObservableObject {
         case failed(String)
     }
 
-    @Published private var statuses: [SourceKind: Status] = [:]
+    @Published private var statuses: [SourceKind: Status] = [:] {
+        didSet { persist() }
+    }
     @Published private(set) var lastChecked: [SourceKind: Date] = [:]
+
+    private static let storeKey = "connectionStatuses"
+
+    init() {
+        // Zuletzt bekannten Status wiederherstellen, damit nach dem Start nicht nur „Bereit“ dasteht.
+        guard let saved = UserDefaults.standard.dictionary(forKey: Self.storeKey) as? [String: [String: Any]] else { return }
+        var restored: [SourceKind: Status] = [:]
+        var dates: [SourceKind: Date] = [:]
+        for (raw, entry) in saved {
+            guard let kind = SourceKind(rawValue: raw), let state = entry["state"] as? String else { continue }
+            let message = entry["message"] as? String ?? ""
+            restored[kind] = state == "ok" ? .ok(message) : .failed(message)
+            dates[kind] = entry["date"] as? Date
+        }
+        statuses = restored
+        lastChecked = dates
+    }
+
+    private func persist() {
+        var out: [String: [String: Any]] = [:]
+        for (kind, status) in statuses {
+            var entry: [String: Any] = [:]
+            switch status {
+            case .ok(let m): entry = ["state": "ok", "message": m]
+            case .failed(let m): entry = ["state": "failed", "message": m]
+            default: continue
+            }
+            if let d = lastChecked[kind] { entry["date"] = d }
+            out[kind.rawValue] = entry
+        }
+        UserDefaults.standard.set(out, forKey: Self.storeKey)
+    }
+
+    /// Beim Start im Hintergrund: alle eingerichteten Quellen nacheinander prüfen.
+    func testAllConfigured() async {
+        for kind in SourceKind.allCases where kind != .rss && Providers.hasCredentials(kind) {
+            await test(kind)
+            try? await Task.sleep(nanoseconds: 800_000_000)
+        }
+    }
 
     /// Nur für das Vorschau-Rendering.
     var previewOverrides: [SourceKind: Status] = [:]
@@ -73,14 +115,14 @@ final class ConnectionTester: ObservableObject {
     }
 
     func recordSuccess(_ kind: SourceKind) {
-        if case .ok = statuses[kind] { return }
-        statuses[kind] = .ok("Verbunden")
         lastChecked[kind] = Date()
+        if case .ok = statuses[kind] { persist(); return }
+        statuses[kind] = .ok("Verbunden")
     }
 
     func recordFailure(_ kind: SourceKind, _ error: Error) {
-        statuses[kind] = .failed(Self.describe(error, kind))
         lastChecked[kind] = Date()
+        statuses[kind] = .failed(Self.describe(error, kind))
     }
 
     /// Übersetzt technische Fehler in verständliche Hinweise.

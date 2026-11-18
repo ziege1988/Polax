@@ -58,6 +58,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
 
         updater.startAutomaticChecks()
 
+        // Eingerichtete Bildquellen kurz nach dem Start im Hintergrund prüfen.
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            await ConnectionTester.shared.testAllConfigured()
+        }
+
         // Datensicherung: beim Start und täglich prüfen, ob die wöchentliche iCloud-Sicherung fällig ist.
         BackupManager.autoBackupIfDue(store: store)
         let backupTimer = Timer(timeInterval: 24 * 3600, repeats: true) { [weak self] _ in
