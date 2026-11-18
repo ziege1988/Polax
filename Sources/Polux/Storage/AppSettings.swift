@@ -17,6 +17,9 @@ final class AppSettings: ObservableObject {
     /// Neue Versionen ohne Rückfrage installieren (beim Start bzw. alle paar Stunden).
     @Published var autoInstallUpdates: Bool { didSet { d.set(autoInstallUpdates, forKey: "autoInstallUpdates") } }
     @Published var lastUpdateCheck: Date? { didSet { d.set(lastUpdateCheck, forKey: "lastUpdateCheck") } }
+    /// Wöchentliche automatische Sicherung in iCloud Drive.
+    @Published var autoBackupToICloud: Bool { didSet { d.set(autoBackupToICloud, forKey: "autoBackupToICloud") } }
+    @Published var lastBackup: Date? { didSet { d.set(lastBackup, forKey: "lastBackup") } }
 
     private init() {
         d.register(defaults: [
@@ -38,5 +41,7 @@ final class AppSettings: ObservableObject {
         autoCheckUpdates = d.bool(forKey: "autoCheckUpdates")
         autoInstallUpdates = d.bool(forKey: "autoInstallUpdates")
         lastUpdateCheck = d.object(forKey: "lastUpdateCheck") as? Date
+        autoBackupToICloud = d.bool(forKey: "autoBackupToICloud")
+        lastBackup = d.object(forKey: "lastBackup") as? Date
     }
 }

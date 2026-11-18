@@ -464,30 +464,6 @@ struct ConnectionRow: View {
     }
 }
 
-/// Aufklappbare Kurzanleitung zum Schlüssel.
-
-struct SourceStatusBadge: View {
-    let kind: SourceKind
-    @ObservedObject private var tester = ConnectionTester.shared
-
-    var body: some View {
-        switch tester.status(kind) {
-        case .ok:
-            Image(systemName: "checkmark.circle.fill").foregroundColor(.green).help("Verbunden")
-        case .failed(let m):
-            Button {
-                SettingsNavigation.shared.setUp(kind)
-            } label: {
-                Image(systemName: "exclamationmark.triangle.fill").foregroundColor(.red)
-            }
-            .buttonStyle(.plain)
-            .help(m)
-        default:
-            EmptyView()
-        }
-    }
-}
-
 /// Testet ein einzelnes Pinterest-Board bzw. einen RSS-Feed.
 struct FeedTestButton: View {
     let feed: String

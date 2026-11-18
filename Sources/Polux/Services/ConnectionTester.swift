@@ -43,7 +43,6 @@ final class ConnectionTester: ObservableObject {
 
         var probe = PhotoCollection(name: "Verbindungstest", keywords: ["portrait"])
         probe.allowNudity = false
-        probe.photosOnly = false
         do {
             let results = try await Providers.provider(for: kind)
                 .search(query: "portrait", collection: probe, page: 1)

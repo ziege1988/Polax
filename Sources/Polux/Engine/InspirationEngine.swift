@@ -239,7 +239,7 @@ final class InspirationEngine: ObservableObject {
                       aspect: r.2, to: collectionID)
         // Sofort neue Vorschläge im gelernten Stil vormerken.
         if collectionID == store.currentCollectionID {
-            await refill(collectionID, preferLearned: true)
+            await refill(collectionID)
         }
     }
 
@@ -391,7 +391,7 @@ final class InspirationEngine: ObservableObject {
         }
     }
 
-    private func refill(_ colID: UUID, preferLearned: Bool = false) async {
+    private func refill(_ colID: UUID) async {
         guard let col = store.collection(colID) else { return }
         let kinds = col.sources.filter { Providers.isUsable($0, for: col) }
         guard !kinds.isEmpty else {
@@ -405,7 +405,7 @@ final class InspirationEngine: ObservableObject {
         for attempt in 0..<2 where fresh.isEmpty {
             let queries = (focus != nil && attempt == 0)
                 ? focusQueries(for: col, focus!)
-                : StyleEngine.queries(for: col, profile: prof, count: 3, preferLearned: preferLearned && attempt == 0)
+                : StyleEngine.queries(for: col, profile: prof, count: 3)
             var queriesBySource: [SourceKind: String] = [:]
             for kind in kinds { queriesBySource[kind] = queries.randomElement() ?? col.name }
             let plannedQueries = queriesBySource

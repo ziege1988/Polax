@@ -117,6 +117,7 @@ struct PhotoCollection: Codable, Hashable, Identifiable {
     var allowNudity: Bool
     /// 0 = egal, 1 = stark düstere / Low-Key-Bildsprache bevorzugen.
     var darkBias: Double
+    /// Veraltet (seit 1.0.7 gilt „nur Fotos“ immer) – bleibt nur zum Lesen älterer Sicherungen erhalten.
     var photosOnly: Bool
     /// Wer soll auf den Fotos zu sehen sein (Frau, Mann, Paar …)?
     var subject: SubjectFocus

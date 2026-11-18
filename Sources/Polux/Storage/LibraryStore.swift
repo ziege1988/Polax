@@ -200,8 +200,12 @@ final class LibraryStore: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0, execute: work)
     }
 
+    /// Während einer Wiederherstellung gesetzt: verhindert, dass alte Daten zurückgeschrieben werden.
+    var savingDisabled = false
+
     func saveNow() {
         saveWork?.cancel()
+        guard !savingDisabled else { return }
         let file = LibraryFile(version: 1, collections: collections)
         do {
             let data = try JSONEncoder().encode(file)

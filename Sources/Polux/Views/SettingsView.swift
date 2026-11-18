@@ -301,31 +301,6 @@ struct PageHeader: View {
     }
 }
 
-/// Farbpunkt für den Verbindungsstatus in der Seitenleiste.
-struct StatusDot: View {
-    let kind: SourceKind
-    @ObservedObject private var tester = ConnectionTester.shared
-    @EnvironmentObject var store: LibraryStore
-
-    var body: some View {
-        let color: Color? = {
-            if kind == .rss {
-                return store.collections.contains { !$0.feeds.isEmpty } ? .green : nil
-            }
-            switch tester.status(kind) {
-            case .ok: return .green
-            case .failed: return .red
-            default: return nil
-            }
-        }()
-        if let color {
-            Circle().fill(color).frame(width: 7, height: 7)
-        } else if kind.needsCredentials && !Providers.hasCredentials(kind) {
-            Image(systemName: "key").font(.caption2).foregroundColor(.secondary).help("Schlüssel fehlt")
-        }
-    }
-}
-
 // MARK: - App: Wiedergabe
 
 struct PlaybackSettingsView: View {
@@ -407,6 +382,8 @@ struct StorageSettingsView: View {
     @EnvironmentObject var store: LibraryStore
     @EnvironmentObject var engine: InspirationEngine
     @State private var cacheSize: Int64 = 0
+    @State private var backupRunning = false
+    @State private var backupMessage: String?
 
     var body: some View {
         Form {
@@ -426,6 +403,45 @@ struct StorageSettingsView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            Section {
+                HStack {
+                    Button("Sicherung exportieren …") { BackupManager.exportInteractive(store: store) }
+                    Button("Sicherung wiederherstellen …") { BackupManager.importInteractive(store: store) }
+                }
+                Toggle("Wöchentlich automatisch in iCloud Drive sichern", isOn: $settings.autoBackupToICloud)
+                    .disabled(!BackupManager.iCloudAvailable)
+                    .onChange(of: settings.autoBackupToICloud) { on in
+                        if on { BackupManager.autoBackupIfDue(store: store) }
+                    }
+                if BackupManager.iCloudAvailable {
+                    HStack {
+                        Button("Jetzt in iCloud sichern") {
+                            backupRunning = true
+                            Task { @MainActor in
+                                backupMessage = (try? await BackupManager.backupToICloud(store: store)) != nil
+                                    ? "Gesichert in iCloud Drive › Polux Sicherungen"
+                                    : "Sicherung fehlgeschlagen"
+                                backupRunning = false
+                            }
+                        }
+                        .disabled(backupRunning)
+                        if backupRunning { ProgressView().controlSize(.small) }
+                        if let backupMessage { Text(backupMessage).font(.caption).foregroundColor(.secondary) }
+                    }
+                } else {
+                    Text("iCloud Drive ist auf diesem Mac nicht aktiv – Sicherungen lassen sich trotzdem als Datei exportieren.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+                if let last = settings.lastBackup {
+                    LabeledContent("Letzte Sicherung", value: last.formatted(date: .abbreviated, time: .shortened))
+                }
+            } header: {
+                Text("Datensicherung")
+            } footer: {
+                Text("Gesichert werden Sammlungen, Schlagwörter, Lieblingsfotos und Notizen. API-Schlüssel bleiben im Schlüsselbund und sind nicht Teil der Sicherung. Automatisch werden die letzten 4 Sicherungen behalten.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+
             Section("Verlauf") {
                 LabeledContent("Verlaufs-Cache (max. 24 Fotos)", value: Paths.formatBytes(cacheSize))
                 Button("Verlaufs-Cache leeren") {

@@ -57,6 +57,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMe
             .store(in: &bag)
 
         updater.startAutomaticChecks()
+
+        // Datensicherung: beim Start und täglich prüfen, ob die wöchentliche iCloud-Sicherung fällig ist.
+        BackupManager.autoBackupIfDue(store: store)
+        let backupTimer = Timer(timeInterval: 24 * 3600, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                BackupManager.autoBackupIfDue(store: self.store)
+            }
+        }
+        RunLoop.main.add(backupTimer, forMode: .common)
     }
 
     func applicationWillTerminate(_ notification: Notification) {

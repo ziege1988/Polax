@@ -123,7 +123,7 @@ enum StyleEngine {
     /// Kombiniert eigene Schlagwörter mit gelernten Stil-Begriffen.
     /// Suchanfragen bestehen nur aus den eigenen Schlagwörtern (plus ggf. „woman/man/couple“ aus „Person im Bild“).
     /// Gelernte Stilbegriffe beeinflussen nur noch die Reihenfolge, nicht die Suche selbst.
-    static func queries(for c: PhotoCollection, profile: StyleProfile, count: Int, preferLearned: Bool = false) -> [String] {
+    static func queries(for c: PhotoCollection, profile: StyleProfile, count: Int) -> [String] {
         var base = c.keywords.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
         if base.isEmpty { base = [c.name] }
         var result: [String] = []
@@ -208,11 +208,6 @@ enum StyleEngine {
 
     /// Mindestanteil – bei „editorial gothic“ genügt ein Treffer, bei vier Wörtern zwei.
     static let keywordThreshold = 0.5
-
-    /// Zu wenig Beschreibung, um sicher zu prüfen? Dann entscheidet die Bewertung statt eines harten Filters.
-    static func hasEnoughMetadata(_ c: PhotoCandidate) -> Bool {
-        candidateWords(c).filter { $0.count >= 3 }.count >= 3
-    }
 
     /// Ausschlusswörter: Einzelwörter als ganzes Wort (unscharf), Wortgruppen als Phrase. Prüft auch Motiv-Labels.
     static func matchesExcludedWords(_ c: PhotoCandidate, analysis: ImageAnalysis?, collection: PhotoCollection) -> Bool {
