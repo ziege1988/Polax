@@ -79,11 +79,17 @@ jobs:
           path: ${{ runner.temp }}/preview/*.png
 
       - name: Release veröffentlichen
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release)
+        # Veröffentlicht automatisch, sobald es zur Versionsnummer in VERSION noch kein Release gibt
+        # (normaler Push), oder bei Tag / manuellem Start mit „release“.
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release) || github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v$VERSION"
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG gibt es schon – nichts zu tun."
+            exit 0
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG existiert bereits – lade ZIP neu hoch."
             gh release upload "$TAG" dist/Polux-*.zip --clobber
