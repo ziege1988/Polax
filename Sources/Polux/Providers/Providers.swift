@@ -414,7 +414,7 @@ struct RSSProvider: ImageProvider {
     ]
 
     enum FeedProblem: LocalizedError {
-        case singlePin, notAFeed, invalid
+        case singlePin, notAFeed, invalid, empty
         var errorDescription: String? {
             switch self {
             case .singlePin:
@@ -423,6 +423,8 @@ struct RSSProvider: ImageProvider {
                 return "Pinterest liefert für diese Adresse keinen Feed. Bitte die Board-Adresse verwenden (pinterest.com/nutzer/boardname)."
             case .invalid:
                 return "Ungültige Adresse."
+            case .empty:
+                return "Der Feed ist leer."
             }
         }
     }
@@ -513,12 +515,56 @@ struct RSSProvider: ImageProvider {
 
     /// Lädt und liest einen einzelnen Feed.
     static func fetchItems(_ raw: String) async throws -> (feed: URL, items: [RSSParser.Item]) {
-        let feed = try await resolve(raw)
+        let r = try await fetchItemsDetailed(raw)
+        return (r.feed, r.items)
+    }
+
+    /// Robuster Abruf: bis zu 3 Versuche mit Pause; Board-Adressen von Pins werden gemerkt;
+    /// ist Pinterest kurz nicht erreichbar, werden die zuletzt geladenen Bilder (bis 48 h) weiterverwendet.
+    static func fetchItemsDetailed(_ raw: String) async throws -> (feed: URL, items: [RSSParser.Item], fromCache: Bool) {
+        let feed: URL
+        if let known = await FeedCache.shared.resolved(raw) {
+            feed = known
+        } else {
+            feed = try await withRetry { try await resolve(raw) }
+            await FeedCache.shared.setResolved(raw, feed)
+        }
         let headers = isPinterest(feed.host ?? "") ? browserHeaders : ["Accept": browserHeaders["Accept"]!]
-        let data = try await HTTP.get(feed, headers: headers)
-        let head = String(decoding: data.prefix(400), as: UTF8.self).lowercased()
-        if head.contains("<!doctype html") || head.contains("<html") { throw FeedProblem.notAFeed }
-        return (feed, RSSParser.parse(data))
+        do {
+            let items: [RSSParser.Item] = try await withRetry {
+                let data = try await HTTP.get(feed, headers: headers)
+                let head = String(decoding: data.prefix(400), as: UTF8.self).lowercased()
+                if head.contains("<!doctype html") || head.contains("<html") { throw FeedProblem.notAFeed }
+                let items = RSSParser.parse(data)
+                if items.isEmpty { throw FeedProblem.empty }
+                return items
+            }
+            await FeedCache.shared.store(items, for: feed)
+            return (feed, items, false)
+        } catch {
+            if let cached = await FeedCache.shared.items(for: feed, maxAge: 48 * 3600) {
+                return (feed, cached, true)
+            }
+            if case FeedProblem.empty = error { return (feed, [], false) }
+            throw error
+        }
+    }
+
+    /// Wiederholt eine Anfrage bei vorübergehenden Fehlern (Zeitüberschreitung, 429/5xx, HTML statt Feed).
+    static func withRetry<T>(_ attempts: Int = 3, _ op: () async throws -> T) async throws -> T {
+        var lastError: Error = FeedProblem.invalid
+        for i in 0..<attempts {
+            do { return try await op() } catch {
+                lastError = error
+                var permanent = false
+                if case ProviderError.http(let code, _) = error, code == 404 || code == 410 { permanent = true }
+                if case FeedProblem.singlePin = error { permanent = true }
+                if case FeedProblem.invalid = error { permanent = true }
+                if permanent || i == attempts - 1 { break }
+                try? await Task.sleep(nanoseconds: UInt64(1_200_000_000 * (i + 1)) + UInt64.random(in: 0...400_000_000))
+            }
+        }
+        throw lastError
     }
 
     func search(query: String, collection: PhotoCollection, page: Int) async throws -> [PhotoCandidate] {
@@ -563,7 +609,7 @@ struct RSSProvider: ImageProvider {
 }
 
 final class RSSParser: NSObject, XMLParserDelegate {
-    struct Item {
+    struct Item: Codable {
         var title = ""
         var link = ""
         var guid = ""
@@ -633,5 +679,53 @@ final class RSSParser: NSObject, XMLParserDelegate {
             current = nil
         default: break
         }
+    }
+}
+
+/// Merkt sich aufgelöste Board-Adressen und zuletzt geladene Feeds (auch über Neustarts hinweg).
+actor FeedCache {
+    static let shared = FeedCache()
+
+    private struct Entry: Codable { var date: Date; var items: [RSSParser.Item] }
+    private struct Store: Codable {
+        var resolved: [String: String] = [:]
+        var feeds: [String: Entry] = [:]
+    }
+
+    private var data = Store()
+    private var loaded = false
+    private var fileURL: URL { Paths.caches.appendingPathComponent("feeds.json") }
+
+    private func load() {
+        guard !loaded else { return }
+        loaded = true
+        if let d = try? Data(contentsOf: fileURL), let s = try? JSONDecoder().decode(Store.self, from: d) { data = s }
+    }
+
+    private func save() {
+        if let d = try? JSONEncoder().encode(data) { try? d.write(to: fileURL, options: .atomic) }
+    }
+
+    func resolved(_ raw: String) -> URL? {
+        load()
+        return data.resolved[raw].flatMap(URL.init(string:))
+    }
+
+    func setResolved(_ raw: String, _ url: URL) {
+        load()
+        data.resolved[raw] = url.absoluteString
+        save()
+    }
+
+    func items(for feed: URL, maxAge: TimeInterval) -> [RSSParser.Item]? {
+        load()
+        guard let e = data.feeds[feed.absoluteString], Date().timeIntervalSince(e.date) < maxAge, !e.items.isEmpty else { return nil }
+        return e.items
+    }
+
+    func store(_ items: [RSSParser.Item], for feed: URL) {
+        load()
+        data.feeds[feed.absoluteString] = Entry(date: Date(), items: Array(items.prefix(150)))
+        save()
     }
 }

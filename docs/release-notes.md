@@ -1,6 +1,9 @@
-## Polux 1.0.14
+## Polux 1.0.15
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.15**
+- Pinterest zuverlässiger: bis zu drei Versuche mit kurzer Pause, wenn Pinterest eine Anfrage abweist; gefundene Boards zu Pins werden gemerkt; ist Pinterest kurz nicht erreichbar, nutzt Polux die zuletzt geladenen Bilder (bis 48 Stunden) weiter.
 
 **Neu in 1.0.14**
 - Pinterest: Ist statt eines Boards ein **einzelner Pin** eingetragen (z. B. ein geteilter pin.it-Link), ermittelt Polux automatisch das Board, auf dem der Pin gespeichert ist, und nutzt dessen Feed.
@@ -71,7 +74,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.14.zip` herunterladen und entpacken.
+1. `Polux-1.0.15.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

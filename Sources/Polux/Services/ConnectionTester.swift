@@ -59,13 +59,14 @@ final class ConnectionTester: ObservableObject {
     /// Testet eine einzelne Feed-Adresse (Pinterest-Board oder RSS).
     static func testFeed(_ raw: String) async -> Status {
         do {
-            let (_, items) = try await RSSProvider.fetchItems(raw)
-            let withImages = items.filter { !$0.mediaURLs.isEmpty || RSSParser.firstImage(in: $0.description) != nil }
-            if items.isEmpty {
+            let r = try await RSSProvider.fetchItemsDetailed(raw)
+            let withImages = r.items.filter { !$0.mediaURLs.isEmpty || RSSParser.firstImage(in: $0.description) != nil }
+            if r.items.isEmpty {
                 return .failed("Feed ist leer – ist das Board öffentlich und enthält es Pins?")
             }
-            return withImages.isEmpty
-                ? .failed("Feed gefunden, aber ohne Bilder.")
+            if withImages.isEmpty { return .failed("Feed gefunden, aber ohne Bilder.") }
+            return r.fromCache
+                ? .ok("\(withImages.count) Bilder (Pinterest gerade langsam – gespeicherte Bilder werden genutzt)")
                 : .ok("\(withImages.count) Bilder gefunden")
         } catch {
             return .failed(describe(error, .rss))
