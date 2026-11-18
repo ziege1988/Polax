@@ -189,6 +189,12 @@ struct PolaroidView: View {
                 .scaleEffect(heartPulse ? 1.25 : 1)
                 .disabled(engine.current == nil)
 
+                PolaroidIconButton(systemName: "hand.thumbsdown", size: icon * 0.92,
+                                   help: "Passt nicht – solche Fotos seltener zeigen") {
+                    engine.rejectCurrent()
+                }
+                .disabled(engine.current == nil)
+
                 addToCollectionMenu(icon: icon)
 
                 PolaroidIconButton(systemName: "wand.and.stars", size: icon * 0.9,

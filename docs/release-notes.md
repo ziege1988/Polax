@@ -1,6 +1,15 @@
-## Polux 1.0.15
+## Polux 1.0.16
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.16**
+- **Zielgenauere Vorschläge:**
+  - Keine zufälligen „Ausreißer“-Fotos mehr (bisher wurde etwa jedes achte Foto absichtlich zufällig gewählt).
+  - Schlagwörter strenger: allgemeine Wörter („dark“, „art“, „photo“ …) zählen nur halb – mindestens ein prägendes Wort des Schlagworts muss passen. Fotos ohne Beschreibung werden nicht mehr ungeprüft gezeigt.
+  - Die Bilderkennung prüft das Schlagwort zusätzlich am Bild.
+  - Plakate, Screenshots, Memes und Bilder mit viel Text sowie extreme Panorama-/Streifenformate werden aussortiert; Mindestgröße 480 px.
+- **Neuer Knopf „Passt nicht“ (Daumen runter)** im Polaroid: Polux merkt sich den Stil als unerwünscht und zeigt sofort das nächste Foto.
+- Die Beschriftung im Polaroid zeigt jetzt, **zu welchem Schlagwort** das Foto gefunden wurde.
 
 **Neu in 1.0.15**
 - Pinterest zuverlässiger: bis zu drei Versuche mit kurzer Pause, wenn Pinterest eine Anfrage abweist; gefundene Boards zu Pins werden gemerkt; ist Pinterest kurz nicht erreichbar, nutzt Polux die zuletzt geladenen Bilder (bis 48 Stunden) weiter.
@@ -74,7 +83,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.15.zip` herunterladen und entpacken.
+1. `Polux-1.0.16.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

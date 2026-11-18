@@ -154,6 +154,21 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    /// „Passt nicht“: Stil des Fotos als Negativ-Signal merken (ohne dass es gelikt war).
+    func reject(candidate: PhotoCandidate, analysis: ImageAnalysis?, in collectionID: UUID) {
+        mutate(collectionID) { c in
+            for t in StyleEngine.terms(of: candidate.tags + (analysis?.labels ?? [])) {
+                c.rejectedTags[t, default: 0] += 1
+            }
+            if let fp = analysis?.featurePrint {
+                c.rejectedPrints.append(fp)
+                if c.rejectedPrints.count > Self.maxRejectedPrints {
+                    c.rejectedPrints.removeFirst(c.rejectedPrints.count - Self.maxRejectedPrints)
+                }
+            }
+        }
+    }
+
     func resetRejections(_ collectionID: UUID) {
         mutate(collectionID) { c in
             c.rejectedTags = [:]

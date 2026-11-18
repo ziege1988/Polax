@@ -148,20 +148,43 @@ enum StyleEngine {
         return prev[y.count]
     }
 
-    /// Wie gut passt ein Bild zum besten Schlagwort der Sammlung? 0…1 (Anteil getroffener Wörter).
-    static func keywordMatch(_ c: PhotoCandidate, analysis: ImageAnalysis?, collection: PhotoCollection) -> Double {
+    /// Allgemeine Wörter, die fast überall vorkommen – sie zählen nur halb und reichen allein nicht.
+    static let genericTokens: Set<String> = [
+        "dark", "black", "white", "light", "fine", "art", "arts", "photo", "photography", "image", "beautiful",
+        "model", "woman", "women", "man", "men", "girl", "people", "person", "style", "mood", "moody",
+        "color", "colour", "night", "shoot", "shooting", "studio", "foto", "fotografie", "schön", "frau", "mann"
+    ]
+
+    /// Wie gut passt ein Bild zu einem Schlagwort? Liefert Wert 0…1 und das beste Schlagwort.
+    static func bestKeyword(_ c: PhotoCandidate, analysis: ImageAnalysis?, collection: PhotoCollection) -> (score: Double, keyword: String?) {
         let keywords = collection.keywords.filter { !keywordTokens($0).isEmpty }
-        guard !keywords.isEmpty else { return 1 }
+        guard !keywords.isEmpty else { return (1, nil) }
         var hay = candidateWords(c)
         for l in analysis?.labels ?? [] { hay.formUnion(words(of: l)) }
-        guard !hay.isEmpty else { return 0 }
-        var best = 0.0
+        guard !hay.isEmpty else { return (0, nil) }
+        var best: (Double, String?) = (0, nil)
         for kw in keywords {
             let toks = keywordTokens(kw)
-            let hit = toks.filter { t in hay.contains { fuzzyEqual(t, $0) } }.count
-            best = max(best, Double(hit) / Double(toks.count))
+            let specific = toks.filter { !genericTokens.contains($0) }
+            var total = 0.0, got = 0.0, specificHit = false
+            for t in toks {
+                let w = genericTokens.contains(t) ? 0.5 : 1.0
+                total += w
+                if hay.contains(where: { fuzzyEqual(t, $0) }) {
+                    got += w
+                    if w == 1.0 { specificHit = true }
+                }
+            }
+            // Hat das Schlagwort prägende Wörter, muss mindestens eines davon vorkommen.
+            var score = total > 0 ? got / total : 0
+            if !specific.isEmpty && !specificHit { score = min(score, 0.2) }
+            if score > best.0 { best = (score, kw) }
         }
         return best
+    }
+
+    static func keywordMatch(_ c: PhotoCandidate, analysis: ImageAnalysis?, collection: PhotoCollection) -> Double {
+        bestKeyword(c, analysis: analysis, collection: collection).score
     }
 
     /// Mindestanteil – bei „editorial gothic“ genügt ein Treffer, bei vier Wörtern zwei.
@@ -351,6 +374,14 @@ enum StyleEngine {
         return score >= artThreshold
     }
 
+    /// Plakate, Screenshots, Memes, Collagen-Banner: viel Text oder extremes Format.
+    static func looksLikeNonPhoto(_ a: ImageAnalysis?) -> Bool {
+        guard let a else { return false }
+        if let t = a.textCoverage, t > 0.05 { return true }
+        if let r = a.aspect, r > 2.1 || r < 0.42 { return true }
+        return false
+    }
+
     /// Ohne erkannte Person, obwohl die Sammlung Personen verlangt (Stillleben, Landschaft, Abstraktes)?
     static func lacksPeople(_ a: ImageAnalysis?, collection: PhotoCollection) -> Bool {
         guard collection.requirePeople || collection.subject != .any else { return false }
@@ -386,7 +417,7 @@ enum StyleEngine {
         }
         if matchesExcludedWords(c, analysis: nil, collection: collection) { return true }
         // Nur Treffer zu den eigenen Schlagwörtern (Pinterest-Boards sind selbst kuratiert und ausgenommen).
-        if c.source != .rss, !collection.keywords.isEmpty, hasEnoughMetadata(c),
+        if c.source != .rss, !collection.keywords.isEmpty,
            keywordMatch(c, analysis: nil, collection: collection) < keywordThreshold {
             return true
         }
@@ -411,7 +442,7 @@ enum StyleEngine {
             if !withPeople.isEmpty { list = withPeople }
         }
         // Etwas Zufall, damit die Sammlung nicht in einer Stil-Blase festhängt.
-        if Double.random(in: 0..<1) < 0.12 { return list.randomElement() }
+        // (Früher: 12 % rein zufällige Auswahl „gegen die Stil-Blase“ – entfernt, das brachte kuriose Fotos.)
 
         let pre = normalized(list.map { prescore($0, profile: profile) })
         let likedSim = closeness(list.map { c in analyses[c.id].flatMap { meanDistance($0, to: profile.likedPrints) } })
@@ -438,7 +469,7 @@ enum StyleEngine {
             } else {
                 s -= 0.2
             }
-            s += Double.random(in: 0...0.25)
+            s += Double.random(in: 0...0.04)   // nur minimale Abwechslung bei Gleichstand
             if best == nil || s > best!.1 { best = (c, s) }
         }
         return best?.0
@@ -485,7 +516,9 @@ enum StyleEngine {
         let humans = VNDetectHumanRectanglesRequest()
         humans.upperBodyOnly = false
         let faces = VNDetectFaceRectanglesRequest()
-        try? handler.perform([classify, fpRequest, humans, faces])
+        let text = VNDetectTextRectanglesRequest()
+        try? handler.perform([classify, fpRequest, humans, faces, text])
+        let textCoverage = (text.results ?? []).reduce(0.0) { $0 + Double($1.boundingBox.width * $1.boundingBox.height) }
         // Nur deutlich sichtbare Personen zählen – kleine Figuren (Statuen, Passanten in der Ferne) nicht.
         let humanCount = (humans.results ?? [])
             .filter { $0.confidence > 0.4 && $0.boundingBox.height >= 0.22 }.count
@@ -514,7 +547,9 @@ enum StyleEngine {
         return ImageAnalysis(labels: Array(labels), featurePrint: printData,
                              luminance: stats.luminance, saturation: stats.saturation,
                              personCount: max(humanCount, faceCount), dhash: dhash(image),
-                             artScore: artScore, paintScore: paintScore)
+                             artScore: artScore, paintScore: paintScore,
+                             textCoverage: min(1, textCoverage),
+                             aspect: Double(image.width) / Double(max(image.height, 1)))
     }
 
     /// Differenz-Hash: 9×8 Graustufen, je Zeile Nachbarn vergleichen → 64 Bit.

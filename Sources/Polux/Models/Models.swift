@@ -85,6 +85,10 @@ struct ImageAnalysis: Codable, Hashable {
     var artScore: Double? = nil
     /// Wie stark das Bild nach Gemälde/Zeichnung aussieht (0…1, Vision).
     var paintScore: Double? = nil
+    /// Anteil der Bildfläche mit Text (Plakate, Screenshots, Memes).
+    var textCoverage: Double? = nil
+    /// Seitenverhältnis Breite/Höhe.
+    var aspect: Double? = nil
 }
 
 /// Ein gelikter, lokal gespeicherter Eintrag einer Sammlung.

@@ -87,21 +87,16 @@ final class InspirationEngine: ObservableObject {
     }
 
     /// Zwei bis drei aussagekräftige Begriffe für die Zeile unter dem Namen.
+    /// Beschriftung: zu welchem Schlagwort das Foto gefunden wurde (macht die Auswahl nachvollziehbar).
     var tagLine: String {
         if let s = statusMessage { return s }
         if let f = focus { return ("Mehr davon · " + f.label).uppercased() }
         let col = store.currentCollection
         if let c = current {
-            let weights = profile(for: col).tagWeights
-            let picked = StyleEngine.terms(of: c.candidate.tags + (c.analysis?.labels ?? []))
-                .filter { $0.count <= 16 }
-                .sorted { lhs, rhs in
-                    let wl = weights[lhs] ?? 0
-                    let wr = weights[rhs] ?? 0
-                    return wl == wr ? lhs < rhs : wl > wr
-                }
-                .prefix(2)
-            if !picked.isEmpty { return picked.joined(separator: " · ").uppercased() }
+            if c.candidate.source == .rss { return "PINTEREST-BOARD" }
+            if let kw = StyleEngine.bestKeyword(c.candidate, analysis: c.analysis, collection: col).keyword {
+                return kw.uppercased()
+            }
             if let q = c.candidate.query { return q.uppercased() }
         }
         return col.keywords.prefix(2).joined(separator: " · ").uppercased()
@@ -188,6 +183,23 @@ final class InspirationEngine: ObservableObject {
 
     // MARK: Likes
 
+    /// „Passt nicht“: merkt sich den Stil als unerwünscht und zeigt sofort das nächste Foto.
+    func rejectCurrent() {
+        guard let e = current else { return }
+        let colID = store.currentCollectionID
+        if store.isLiked(e.candidate.id, in: colID) { store.removeLike(e.candidate.id, from: colID, reject: false) }
+        store.reject(candidate: e.candidate, analysis: e.analysis, in: colID)
+        // Aus dem Verlauf nehmen, damit es beim Zurückblättern nicht wieder auftaucht.
+        if let i = history.firstIndex(where: { $0.id == e.id }) {
+            try? FileManager.default.removeItem(at: Paths.history.appendingPathComponent(history[i].fileName))
+            history.remove(at: i)
+            index = min(index, history.count - 1)
+            saveHistory()
+        }
+        Task { await fetchNew() }
+        reschedule()
+    }
+
     func toggleLike() {
         guard let entry = current else { return }
         let colID = store.currentCollectionID
@@ -260,14 +272,18 @@ final class InspirationEngine: ObservableObject {
                         + 3 * StyleEngine.keywordMatch($0, analysis: nil, collection: col)) }
                 .sorted { $0.1 > $1.1 }
                 .map(\.0)
-            var shortlist = Array(ranked.prefix(5))
-            if let wildcard = ranked.dropFirst(5).randomElement() { shortlist.append(wildcard) }
+            var shortlist = Array(ranked.prefix(6))
+            // (kein zufälliger „Joker“-Kandidat mehr)
             await analyze(shortlist)
 
             // Doppelte Bilder, Cartoon/Anime und Bilder ohne Personen (Stillleben, Abstraktes) aussortieren.
             let likedHashes = col.likes.compactMap { $0.analysis?.dhash }
             let duplicates = shortlist.filter { c in
                 if StyleEngine.looksLikePainting(analyses[c.id]) { return true }
+                if StyleEngine.looksLikeNonPhoto(analyses[c.id]) { return true }
+                // Bilderkennung bestätigt das Schlagwort nicht mehr (z. B. Tag passt, Bild nicht)?
+                if c.source != .rss, !col.keywords.isEmpty,
+                   StyleEngine.keywordMatch(c, analysis: analyses[c.id], collection: col) < StyleEngine.keywordThreshold { return true }
                 if StyleEngine.matchesExcludedWords(c, analysis: analyses[c.id], collection: col) { return true }
                 if StyleEngine.looksLikeClassicPainting(c, analyses[c.id]) { return true }
                 if StyleEngine.lacksPeople(analyses[c.id], collection: col) { return true }
@@ -468,7 +484,7 @@ final class InspirationEngine: ObservableObject {
                 let dest = Paths.history.appendingPathComponent(name)
                 let ok = await Task.detached(priority: .userInitiated) { () -> Bool in
                     guard let img = ImageCodec.downsample(data, maxPixel: 1600),
-                          min(img.width, img.height) >= 200,
+                          min(img.width, img.height) >= 480,
                           let jpeg = ImageCodec.encodeJPEG(img, quality: 0.85) else { return false }
                     return (try? jpeg.write(to: dest, options: .atomic)) != nil
                 }.value
