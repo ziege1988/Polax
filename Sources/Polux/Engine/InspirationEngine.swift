@@ -170,6 +170,7 @@ final class InspirationEngine: ObservableObject {
                 append(HistoryEntry(candidate: cand, collectionID: colID, fileName: fileName,
                                     analysis: analyses[cand.id]))
                 if let h = analyses[cand.id]?.dhash { rememberHash(h) }
+                FilterLog.shared.recordShown(colID)
                 statusMessage = nil
                 return
             } catch {
@@ -177,7 +178,7 @@ final class InspirationEngine: ObservableObject {
             }
         }
         if statusMessage == nil {
-            statusMessage = "Keine neuen Fotos – Suche prüfen"
+            statusMessage = FilterLog.shared.emptyHint(colID, collection: store.collection(colID))
         }
     }
 
@@ -278,19 +279,19 @@ final class InspirationEngine: ObservableObject {
 
             // Doppelte Bilder, Cartoon/Anime und Bilder ohne Personen (Stillleben, Abstraktes) aussortieren.
             let likedHashes = col.likes.compactMap { $0.analysis?.dhash }
+            var rejectedNow: [String: Int] = [:]
             let duplicates = shortlist.filter { c in
-                if StyleEngine.looksLikePainting(analyses[c.id]) { return true }
-                if StyleEngine.looksLikeNonPhoto(analyses[c.id]) { return true }
-                // Bilderkennung bestätigt das Schlagwort nicht mehr (z. B. Tag passt, Bild nicht)?
-                if c.source != .rss, !col.keywords.isEmpty,
-                   StyleEngine.keywordMatch(c, analysis: analyses[c.id], collection: col) < StyleEngine.keywordThreshold { return true }
-                if StyleEngine.matchesExcludedWords(c, analysis: analyses[c.id], collection: col) { return true }
-                if StyleEngine.looksLikeClassicPainting(c, analyses[c.id]) { return true }
-                if StyleEngine.lacksPeople(analyses[c.id], collection: col) { return true }
+                if let reason = StyleEngine.imageReason(c, analysis: analyses[c.id], collection: col) {
+                    rejectedNow[reason, default: 0] += 1
+                    return true
+                }
                 guard let h = analyses[c.id]?.dhash else { return false }
-                return knownHashes.contains { StyleEngine.isNearDuplicate($0, h) }
+                let dup = knownHashes.contains { StyleEngine.isNearDuplicate($0, h) }
                     || likedHashes.contains { StyleEngine.isNearDuplicate($0, h) }
+                if dup { rejectedNow[FilterReason.duplicate, default: 0] += 1 }
+                return dup
             }
+            FilterLog.shared.recordImageChecks(colID, checked: shortlist.count, rejected: rejectedNow)
             if !duplicates.isEmpty {
                 let ids = Set(duplicates.map(\.id))
                 pools[colID]?.removeAll { ids.contains($0.id) }
@@ -405,9 +406,12 @@ final class InspirationEngine: ObservableObject {
             let queries = (focus != nil && attempt == 0)
                 ? focusQueries(for: col, focus!)
                 : StyleEngine.queries(for: col, profile: prof, count: 3, preferLearned: preferLearned && attempt == 0)
+            var queriesBySource: [SourceKind: String] = [:]
+            for kind in kinds { queriesBySource[kind] = queries.randomElement() ?? col.name }
+            let plannedQueries = queriesBySource
             let results = await withTaskGroup(of: (SourceKind, Result<[PhotoCandidate], Error>).self) { group -> [(SourceKind, Result<[PhotoCandidate], Error>)] in
                 for kind in kinds {
-                    let query = queries.randomElement() ?? col.name
+                    let query = plannedQueries[kind] ?? col.name
                     let page = attempt == 0 ? Int.random(in: 1...3) : 1
                     group.addTask {
                         do {
@@ -427,15 +431,29 @@ final class InspirationEngine: ObservableObject {
                 switch r {
                 case .success(let list):
                     ConnectionTester.shared.recordSuccess(kind)
+                    var reasons: [String: Int] = [:]
+                    var accepted = 0
                     for c in list where !seenNow.contains(c.id) && !existing.contains(c.id) {
                         seenNow.insert(c.id)
-                        if store.hasSeen(c.id, in: colID) || store.isLiked(c.id, in: colID) { continue }
-                        if StyleEngine.isExcluded(c, by: col) { continue }
+                        if store.hasSeen(c.id, in: colID) || store.isLiked(c.id, in: colID) {
+                            reasons[FilterReason.seen, default: 0] += 1
+                            continue
+                        }
+                        if let reason = StyleEngine.exclusionReason(c, collection: col) {
+                            reasons[reason, default: 0] += 1
+                            continue
+                        }
                         fresh.append(c)
+                        accepted += 1
                     }
+                    FilterLog.shared.recordSearch(colID, source: kind, query: queriesBySource[kind] ?? "",
+                                                  received: list.count, accepted: accepted, rejected: reasons, error: nil)
                 case .failure(let e):
                     ConnectionTester.shared.recordFailure(kind, e)
-                    errors.append("\(kind.shortName): " + ConnectionTester.describe(e, kind))
+                    let message = ConnectionTester.describe(e, kind)
+                    errors.append("\(kind.shortName): " + message)
+                    FilterLog.shared.recordSearch(colID, source: kind, query: queriesBySource[kind] ?? "",
+                                                  received: 0, accepted: 0, rejected: [:], error: message)
                 }
             }
         }

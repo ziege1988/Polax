@@ -13,13 +13,14 @@ enum SettingsPage: Hashable {
 
 /// Reiter innerhalb einer Sammlung.
 enum CollectionTab: String, CaseIterable, Identifiable {
-    case search, sources, style
+    case search, sources, style, log
     var id: String { rawValue }
     var title: String {
         switch self {
         case .search: return "Suche"
         case .sources: return "Quellen"
         case .style: return "Stil & Fotos"
+        case .log: return "Protokoll"
         }
     }
 }

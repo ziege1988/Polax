@@ -8,6 +8,11 @@ let package = Package(
         .executableTarget(
             name: "Polux",
             path: "Sources/Polux"
+        ),
+        .testTarget(
+            name: "PoluxTests",
+            dependencies: ["Polux"],
+            path: "Tests/PoluxTests"
         )
     ]
 )

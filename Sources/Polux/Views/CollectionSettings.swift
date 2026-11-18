@@ -46,7 +46,7 @@ struct CollectionEditor: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(maxWidth: 420)
+            .frame(maxWidth: 520)
             .padding(.bottom, 4)
 
             Group {
@@ -54,6 +54,7 @@ struct CollectionEditor: View {
                 case .search: CollectionSearchTab(collection: binding)
                 case .sources: CollectionSourcesTab(collection: binding)
                 case .style: CollectionStyleTab(collection: binding, collectionID: collectionID)
+                case .log: CollectionLogTab(collection: binding.wrappedValue)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -357,5 +358,106 @@ struct FeedListEditor: View {
         }
         input = ""
         error = nil
+    }
+}
+
+// MARK: Reiter „Protokoll“
+
+private struct ReasonRow: Identifiable {
+    let name: String
+    let count: Int
+    var id: String { name }
+}
+
+private struct CollectionLogTab: View {
+    let collection: PhotoCollection
+    @ObservedObject private var log = FilterLog.shared
+
+    var body: some View {
+        let s = log.summary(collection.id)
+        let reasons = s.reasons.sorted { $0.value > $1.value }.map { ReasonRow(name: $0.key, count: $0.value) }
+        let tips = log.tips(collection.id, collection: collection)
+        Form {
+            Section {
+                HStack(spacing: 24) {
+                    stat("Gefunden", s.received)
+                    stat("Passend", s.accepted)
+                    stat("Bild geprüft", s.imagesChecked)
+                    stat("Gezeigt", s.shown)
+                }
+                .frame(maxWidth: .infinity)
+            } header: {
+                Text("Seit \(s.since.formatted(date: .omitted, time: .shortened))")
+            } footer: {
+                Text("„Passend“ = Titel/Tags passen zu deinen Schlagwörtern und Regeln. Danach prüft die Bilderkennung jedes Foto, bevor es gezeigt wird.")
+                    .font(.caption).foregroundColor(.secondary)
+            }
+
+            if !tips.isEmpty {
+                Section("Tipps") {
+                    ForEach(tips, id: \.self) { t in
+                        Label(t, systemImage: "lightbulb").font(.callout)
+                    }
+                }
+            }
+
+            Section("Warum aussortiert?") {
+                if reasons.isEmpty {
+                    Text("Noch keine Daten – das Protokoll füllt sich mit den nächsten Fotos.")
+                        .foregroundColor(.secondary)
+                } else {
+                    let total = max(1, reasons.reduce(0) { $0 + $1.count })
+                    ForEach(reasons) { r in
+                        HStack {
+                            Text(r.name)
+                            Spacer()
+                            ProgressView(value: Double(r.count), total: Double(total))
+                                .frame(width: 120)
+                            Text("\(r.count)").monospacedDigit().foregroundColor(.secondary).frame(width: 40, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+
+            Section("Letzte Suchen") {
+                if s.searches.isEmpty {
+                    Text("Noch keine Suche seit dem Start.").foregroundColor(.secondary)
+                } else {
+                    ForEach(s.searches) { q in
+                        VStack(alignment: .leading, spacing: 3) {
+                            HStack {
+                                Image(systemName: q.source.icon).foregroundColor(.secondary).frame(width: 18)
+                                Text(q.source.title).fontWeight(.medium)
+                                Text("„\(q.query)“").foregroundColor(.secondary).lineLimit(1)
+                                Spacer()
+                                Text(q.date.formatted(date: .omitted, time: .shortened))
+                                    .font(.caption).foregroundColor(.secondary)
+                            }
+                            if let e = q.error {
+                                Text(e).font(.caption).foregroundColor(.red)
+                            } else {
+                                let top = q.rejected.sorted { $0.value > $1.value }.prefix(3)
+                                    .map { "\($0.value)× \($0.key)" }.joined(separator: " · ")
+                                Text("\(q.received) Treffer → \(q.accepted) passend" + (top.isEmpty ? "" : " · aussortiert: " + top))
+                                    .font(.caption).foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            }
+
+            Section {
+                Button("Protokoll zurücksetzen") { log.reset(collection.id) }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func stat(_ title: String, _ value: Int) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)").font(.system(size: 22, weight: .semibold)).monospacedDigit()
+            Text(title).font(.caption).foregroundColor(.secondary)
+        }
     }
 }

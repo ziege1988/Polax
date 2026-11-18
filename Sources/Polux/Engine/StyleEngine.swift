@@ -19,6 +19,25 @@ struct StyleProfile {
 /// - visueller Fingerabdruck (Vision Feature Print) → Ähnlichkeit zu gelikten Bildern
 /// - Helligkeit (düstere Inszenierung)
 /// - Negativ-Signale aus in der Galerie entfernten Bildern
+/// Verständliche Gründe für das Filterprotokoll.
+enum FilterReason {
+    static let keyword = "Schlagwort passt nicht"
+    static let excludedWord = "Ausschlusswort"
+    static let painting = "Gemälde / Zeichnung"
+    static let digitalArt = "Gemalte Digitalkunst"
+    static let anime = "Anime / Comic"
+    static let stillLife = "Stillleben / Abstrakt"
+    static let place = "Architektur / Landschaft ohne Person"
+    static let wrongSubject = "Falsche Person (Frau/Mann)"
+    static let noPerson = "Keine Person erkannt"
+    static let animeVision = "Cartoon/Anime (Bilderkennung)"
+    static let paintingVision = "Gemälde (Bilderkennung)"
+    static let nonPhoto = "Text, Plakat oder Streifenformat"
+    static let duplicate = "Doppelt"
+    static let seen = "Schon gezeigt"
+    static let tooSmall = "Bild nicht ladbar / zu klein"
+}
+
 enum StyleEngine {
     static let stopWords: Set<String> = [
         "photo", "photos", "photograph", "photography", "photographer", "image", "images", "picture",
@@ -353,19 +372,22 @@ enum StyleEngine {
     static let artThreshold = 0.3
 
     /// Prüft Titel/Tags auf Gemälde, Anime, Stillleben oder Abstraktes.
-    static func looksLikePainting(_ c: PhotoCandidate) -> Bool {
+    static func looksLikePainting(_ c: PhotoCandidate) -> Bool { artReason(c) != nil }
+
+    /// Grund, warum Titel/Tags auf Kunst statt Foto hindeuten (nil = unauffällig).
+    static func artReason(_ c: PhotoCandidate) -> String? {
         let w = words(of: ([c.title] + c.tags).joined(separator: " "))
-        if !w.isDisjoint(with: paintingWords) || !w.isDisjoint(with: animeWords) || !w.isDisjoint(with: stillLifeWords) {
-            return true
-        }
+        let text = ([c.title] + c.tags).joined(separator: " ").lowercased()
+        if !w.isDisjoint(with: animeWords) { return FilterReason.anime }
+        if !w.isDisjoint(with: stillLifeWords) { return FilterReason.stillLife }
+        if !w.isDisjoint(with: paintingWords) { return FilterReason.painting }
         // Digitale Malerei: nur erlaubt, wenn ausdrücklich fotorealistisch beschrieben.
         if w.isDisjoint(with: photorealWords) {
-            if !w.isDisjoint(with: digitalArtWords) { return true }
-            let text = ([c.title] + c.tags).joined(separator: " ").lowercased()
-            if digitalArtPhrases.contains(where: { text.contains($0) }) { return true }
+            if !w.isDisjoint(with: digitalArtWords) { return FilterReason.digitalArt }
+            if digitalArtPhrases.contains(where: { text.contains($0) }) { return FilterReason.digitalArt }
         }
-        let hay = ([c.title] + c.tags).joined(separator: " ").lowercased()
-        return excludedPhrases.contains { hay.contains($0) }
+        if excludedPhrases.contains(where: { text.contains($0) }) { return FilterReason.painting }
+        return nil
     }
 
     /// Bilderkennung: wirkt das Bild wie Cartoon/Anime?
@@ -401,27 +423,43 @@ enum StyleEngine {
     }
 
     static func isExcluded(_ c: PhotoCandidate, by collection: PhotoCollection) -> Bool {
-        // Grundsätzlich keine Gemälde, Zeichnungen oder Illustrationen.
-        if looksLikePainting(c) { return true }
+        exclusionReason(c, collection: collection) != nil
+    }
+
+    /// Prüfung anhand von Titel/Tags (vor dem Laden des Bildes). Liefert den Grund oder nil.
+    static func exclusionReason(_ c: PhotoCandidate, collection: PhotoCollection) -> String? {
+        if let r = artReason(c) { return r }
         if collection.requirePeople || collection.subject != .any {
             let w = candidateWords(c)
-            if w.isDisjoint(with: peopleWords) && !w.isDisjoint(with: placeWords) { return true }
+            if w.isDisjoint(with: peopleWords) && !w.isDisjoint(with: placeWords) { return FilterReason.place }
         }
         // Motiv: z. B. bei „Frau“ Fotos verwerfen, die klar als Mann beschrieben sind (und umgekehrt).
         let negatives = collection.subject.negativeWords
         if !negatives.isEmpty {
             let w = candidateWords(c)
-            let hasNegative = !w.isDisjoint(with: negatives)
-            let hasPositive = !w.isDisjoint(with: collection.subject.positiveWords)
-            if hasNegative && !hasPositive { return true }
+            if !w.isDisjoint(with: negatives) && w.isDisjoint(with: collection.subject.positiveWords) {
+                return FilterReason.wrongSubject
+            }
         }
-        if matchesExcludedWords(c, analysis: nil, collection: collection) { return true }
+        if matchesExcludedWords(c, analysis: nil, collection: collection) { return FilterReason.excludedWord }
         // Nur Treffer zu den eigenen Schlagwörtern (Pinterest-Boards sind selbst kuratiert und ausgenommen).
         if c.source != .rss, !collection.keywords.isEmpty,
            keywordMatch(c, analysis: nil, collection: collection) < keywordThreshold {
-            return true
+            return FilterReason.keyword
         }
-        return false
+        return nil
+    }
+
+    /// Prüfung nach der Bildanalyse. Liefert den Grund oder nil.
+    static func imageReason(_ c: PhotoCandidate, analysis a: ImageAnalysis?, collection: PhotoCollection) -> String? {
+        if looksLikePainting(a) { return FilterReason.animeVision }
+        if looksLikeNonPhoto(a) { return FilterReason.nonPhoto }
+        if c.source != .rss, !collection.keywords.isEmpty,
+           keywordMatch(c, analysis: a, collection: collection) < keywordThreshold { return FilterReason.keyword }
+        if matchesExcludedWords(c, analysis: a, collection: collection) { return FilterReason.excludedWord }
+        if looksLikeClassicPainting(c, a) { return FilterReason.paintingVision }
+        if lacksPeople(a, collection: collection) { return FilterReason.noPerson }
+        return nil
     }
 
     /// Bonus, wenn ein Kandidat ausdrücklich zum gewünschten Motiv passt.

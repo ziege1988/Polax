@@ -34,6 +34,9 @@ jobs:
             echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
           fi
 
+      - name: Tests (Bildregeln, Pinterest-Adressen, Versionen)
+        run: swift test
+
       - name: App bauen
         run: ./scripts/build-app.sh
 

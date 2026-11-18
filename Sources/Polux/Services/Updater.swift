@@ -287,7 +287,7 @@ final class UpdateChecker: ObservableObject {
         return nil
     }
 
-    static func isVersion(_ a: String, newerThan b: String) -> Bool {
+    nonisolated static func isVersion(_ a: String, newerThan b: String) -> Bool {
         func parts(_ s: String) -> [Int] {
             s.split(whereSeparator: { !$0.isNumber }).map { Int($0) ?? 0 }
         }
