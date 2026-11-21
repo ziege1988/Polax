@@ -1,6 +1,12 @@
-## Polux 1.0.19
+## Polux 1.0.20
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.20**
+- „Passt nicht“ (Daumen runter) zeigt sofort eine Rückmeldung: Das Foto wird abgedunkelt mit „Passt nicht – suche Ersatz …“, bis das neue Foto da ist.
+- Läuft gerade schon eine Suche, geht der Klick nicht mehr verloren.
+- Das Herz bezieht sich immer auf das angezeigte Foto (vorher konnte es nach „Passt nicht“ den Zustand des vorherigen Fotos zeigen).
+- Alle Knöpfe im Polaroid geben beim Klicken eine kurze sichtbare Rückmeldung.
 
 **Neu in 1.0.19**
 - Der Verbindungsstatus der Bildquellen bleibt nach einem Neustart erhalten („Verbunden“ statt „Bereit“).
@@ -99,7 +105,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.19.zip` herunterladen und entpacken.
+1. `Polux-1.0.20.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

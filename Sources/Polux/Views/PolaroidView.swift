@@ -100,9 +100,26 @@ struct PolaroidView: View {
             }
         }
         .frame(width: width, height: height)
+        .overlay {
+            if engine.rejecting {
+                ZStack {
+                    Color.black.opacity(0.62)
+                    VStack(spacing: 10) {
+                        Image(systemName: "hand.thumbsdown.fill")
+                            .font(.system(size: width * 0.11))
+                        Text("Passt nicht – suche Ersatz …")
+                            .font(.system(size: max(11, width * 0.042), weight: .medium))
+                        ProgressView().controlSize(.small).colorScheme(.dark)
+                    }
+                    .foregroundColor(.white)
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: engine.rejecting)
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 6) {
-                if engine.isBusy && engine.currentImage != nil {
+                if engine.isBusy && engine.currentImage != nil && !engine.rejecting {
                     ProgressView().controlSize(.mini).colorScheme(.dark)
                 }
                 if settings.isPaused {
@@ -187,13 +204,14 @@ struct PolaroidView: View {
                     engine.toggleLike()
                 }
                 .scaleEffect(heartPulse ? 1.25 : 1)
-                .disabled(engine.current == nil)
+                .disabled(engine.current == nil || engine.rejecting)
 
-                PolaroidIconButton(systemName: "hand.thumbsdown", size: icon * 0.92,
+                PolaroidIconButton(systemName: engine.rejecting ? "hand.thumbsdown.fill" : "hand.thumbsdown",
+                                   size: icon * 0.92,
                                    help: "Passt nicht – solche Fotos seltener zeigen") {
                     engine.rejectCurrent()
                 }
-                .disabled(engine.current == nil)
+                .disabled(engine.current == nil || engine.rejecting)
 
                 addToCollectionMenu(icon: icon)
 

@@ -156,7 +156,17 @@ struct PolaroidIconButton: View {
                 .frame(width: size * 1.5, height: size * 1.5)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressFeedbackStyle())
         .help(help)
+    }
+}
+
+/// Sichtbare Rückmeldung beim Klicken: Symbol wird kurz kleiner und blasser.
+struct PressFeedbackStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.8 : 1)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

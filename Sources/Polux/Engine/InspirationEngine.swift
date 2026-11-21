@@ -185,20 +185,43 @@ final class InspirationEngine: ObservableObject {
     // MARK: Likes
 
     /// „Passt nicht“: merkt sich den Stil als unerwünscht und zeigt sofort das nächste Foto.
+    /// Läuft gerade ein „Passt nicht“? (für die Anzeige im Polaroid)
+    @Published private(set) var rejecting = false
+
+    /// „Passt nicht“: merkt sich den Stil als unerwünscht und ersetzt das Foto.
+    /// Das abgelehnte Foto bleibt sichtbar (abgedunkelt), bis der Ersatz geladen ist –
+    /// so beziehen sich Herz & Co. nie auf ein anderes Foto als das angezeigte.
     func rejectCurrent() {
-        guard let e = current else { return }
+        guard let e = current, !rejecting else { return }
+        rejecting = true
         let colID = store.currentCollectionID
         if store.isLiked(e.candidate.id, in: colID) { store.removeLike(e.candidate.id, from: colID, reject: false) }
         store.reject(candidate: e.candidate, analysis: e.analysis, in: colID)
-        // Aus dem Verlauf nehmen, damit es beim Zurückblättern nicht wieder auftaucht.
-        if let i = history.firstIndex(where: { $0.id == e.id }) {
-            try? FileManager.default.removeItem(at: Paths.history.appendingPathComponent(history[i].fileName))
-            history.remove(at: i)
-            index = min(index, history.count - 1)
-            saveHistory()
-        }
-        Task { await fetchNew() }
+        store.markSeen(e.candidate.id, in: colID)
         reschedule()
+
+        Task { @MainActor in
+            // Läuft schon eine Suche, auf deren Ende warten (statt den Klick zu verschlucken).
+            var waited = 0
+            while isBusy && waited < 150 {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                waited += 1
+            }
+            let lastBefore = history.last?.id
+            await fetchNew()
+            let gotNew = history.last?.id != lastBefore
+
+            // Abgelehntes Foto erst jetzt aus dem Verlauf entfernen.
+            if let i = history.firstIndex(where: { $0.id == e.id }) {
+                try? FileManager.default.removeItem(at: Paths.history.appendingPathComponent(history[i].fileName))
+                history.remove(at: i)
+                if i < index { index -= 1 }
+                index = min(max(index, history.isEmpty ? -1 : 0), history.count - 1)
+                saveHistory()
+                if !gotNew { showEntry(at: index, animated: true) }
+            }
+            withAnimation(.easeOut(duration: 0.3)) { rejecting = false }
+        }
     }
 
     func toggleLike() {
