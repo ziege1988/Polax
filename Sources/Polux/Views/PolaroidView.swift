@@ -302,7 +302,6 @@ struct PolaroidView: View {
         }
     }
 
-    @ViewBuilder
     /// Kurze, gut sichtbare Rückmeldung mitten im Foto.
     private func showFlash(_ symbol: String, color: Color, text: String?, big: Bool = false) {
         let f = PhotoFlash(symbol: symbol, color: color, text: text, big: big)
@@ -314,6 +313,7 @@ struct PolaroidView: View {
         }
     }
 
+    @ViewBuilder
     private func addToCollectionMenu(icon: CGFloat) -> some View {
         if PreviewRenderer.isRendering {
             // Menüs lassen sich offscreen nicht rendern – in der Vorschau nur das Symbol zeigen.
