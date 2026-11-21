@@ -8,6 +8,15 @@ final class DragRegion {
     var rect: CGRect = .zero
 }
 
+/// Rückmeldung im Foto nach einem Klick (Herz, Pause, Ordner …).
+struct PhotoFlash: Equatable {
+    let id = UUID()
+    let symbol: String
+    let color: Color
+    let text: String?
+    var big = false
+}
+
 private struct PhotoFrameKey: PreferenceKey {
     static var defaultValue: CGRect = .zero
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
@@ -21,6 +30,7 @@ struct PolaroidView: View {
 
     @State private var showDrawer = false
     @State private var heartPulse = false
+    @State private var flash: PhotoFlash?
 
     /// Außenabstand für den Schatten.
     static let shadowMargin: CGFloat = 26
@@ -117,6 +127,30 @@ struct PolaroidView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: engine.rejecting)
+        .overlay {
+            if let f = flash {
+                VStack(spacing: 10) {
+                    Image(systemName: f.symbol)
+                        .font(.system(size: width * (f.big ? 0.3 : 0.17), weight: .semibold))
+                        .foregroundColor(f.color)
+                        .shadow(color: .black.opacity(0.5), radius: 12, x: 0, y: 4)
+                    if let t = f.text {
+                        Text(t)
+                            .font(.system(size: max(11, width * 0.042), weight: .medium))
+                            .foregroundColor(.white)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(Color.black.opacity(0.62)))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .id(f.id)
+                .transition(.scale(scale: 0.4).combined(with: .opacity))
+                .allowsHitTesting(false)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 6) {
                 if engine.isBusy && engine.currentImage != nil && !engine.rejecting {
@@ -199,9 +233,15 @@ struct PolaroidView: View {
                                    size: icon,
                                    color: engine.isCurrentLiked ? Theme.heart : Theme.ink,
                                    help: engine.isCurrentLiked ? "Like entfernen" : "Gefällt mir – Stil merken") {
+                    let wasLiked = engine.isCurrentLiked
                     withAnimation(.spring(response: 0.25, dampingFraction: 0.45)) { heartPulse = true }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { heartPulse = false }
                     engine.toggleLike()
+                    if wasLiked {
+                        showFlash("heart.slash.fill", color: .white, text: "Like entfernt")
+                    } else {
+                        showFlash("heart.fill", color: Theme.heart, text: nil, big: true)
+                    }
                 }
                 .scaleEffect(heartPulse ? 1.25 : 1)
                 .disabled(engine.current == nil || engine.rejecting)
@@ -218,7 +258,11 @@ struct PolaroidView: View {
                 PolaroidIconButton(systemName: "wand.and.stars", size: icon * 0.9,
                                    color: engine.isFocusActive ? Theme.heart : Theme.ink,
                                    help: engine.isFocusActive ? "„Mehr davon“ beenden" : "Mehr davon – ähnliche Fotos suchen") {
+                    let wasActive = engine.isFocusActive
                     engine.moreLikeCurrent()
+                    showFlash("wand.and.stars", color: .white,
+                              text: wasActive ? "„Mehr davon“ beendet"
+                                              : "Mehr davon" + (engine.focus.map { ": " + $0.label } ?? ""))
                 }
                 .disabled(engine.current == nil)
 
@@ -226,6 +270,7 @@ struct PolaroidView: View {
                                    help: "Originalquelle öffnen") {
                     if let c = engine.current?.candidate {
                         NSWorkspace.shared.open(c.pageURL ?? c.imageURL)
+                        showFlash("arrow.up.forward.square.fill", color: .white, text: "Quelle im Browser geöffnet")
                     }
                 }
                 .disabled(engine.current == nil)
@@ -234,17 +279,24 @@ struct PolaroidView: View {
 
                 PolaroidIconButton(systemName: "chevron.left", size: icon * 0.9, help: "Vorheriges Foto") {
                     engine.previous()
+                    showFlash("chevron.left.circle.fill", color: .white, text: nil)
                 }
                 .disabled(engine.index <= 0)
                 .opacity(engine.index <= 0 ? 0.35 : 1)
 
                 PolaroidIconButton(systemName: settings.isPaused ? "play.circle" : "pause.circle",
                                    size: icon, help: settings.isPaused ? "Fortsetzen" : "Pause") {
+                    let willPause = !settings.isPaused
                     engine.togglePause()
+                    showFlash(willPause ? "pause.circle.fill" : "play.circle.fill", color: .white,
+                              text: willPause ? "Pausiert" : "Läuft wieder")
                 }
 
                 PolaroidIconButton(systemName: "chevron.right", size: icon * 0.9, help: "Nächstes Foto") {
+                    let needsSearch = engine.index >= engine.history.count - 1
                     engine.next()
+                    showFlash("chevron.right.circle.fill", color: .white,
+                              text: needsSearch ? "Nächstes Foto wird gesucht …" : nil)
                 }
             }
 
@@ -262,6 +314,17 @@ struct PolaroidView: View {
     }
 
     @ViewBuilder
+    /// Kurze, gut sichtbare Rückmeldung mitten im Foto.
+    private func showFlash(_ symbol: String, color: Color, text: String?, big: Bool = false) {
+        let f = PhotoFlash(symbol: symbol, color: color, text: text, big: big)
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { flash = f }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (text == nil ? 0.75 : 1.4)) {
+            if flash?.id == f.id {
+                withAnimation(.easeOut(duration: 0.35)) { flash = nil }
+            }
+        }
+    }
+
     private func addToCollectionMenu(icon: CGFloat) -> some View {
         if PreviewRenderer.isRendering {
             // Menüs lassen sich offscreen nicht rendern – in der Vorschau nur das Symbol zeigen.
@@ -284,6 +347,7 @@ struct PolaroidView: View {
                     ForEach(others) { c in
                         Button {
                             engine.addCurrent(to: c.id)
+                            showFlash("folder.fill.badge.plus", color: .white, text: "Zu „\(c.name)“ hinzugefügt")
                         } label: {
                             if let id = engine.current?.candidate.id, store.isLiked(id, in: c.id) {
                                 Label(c.name, systemImage: "checkmark")
