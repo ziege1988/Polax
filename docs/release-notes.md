@@ -1,15 +1,10 @@
-## Polux 1.0.21
+## Polux 1.0.22
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 
-**Neu in 1.0.21**
-- Jeder Knopf im Polaroid gibt eine sichtbare Rückmeldung direkt im Foto:
-  - **Herz:** großes rotes Herz ploppt im Bild auf („Like entfernt“ beim Zurücknehmen).
-  - **Ordner:** „Zu „Sammlung“ hinzugefügt“.
-  - **Zauberstab:** „Mehr davon: …“ bzw. „beendet“.
-  - **Link:** „Quelle im Browser geöffnet“.
-  - **Pause/Play:** großes Pause-/Play-Symbol mit „Pausiert“ / „Läuft wieder“.
-  - **Vor/Zurück:** Pfeil im Bild, bei neuer Suche „Nächstes Foto wird gesucht …“.
+**Neu in 1.0.22**
+- Klick-Rückmeldung direkt am Knopf: Pfeile, Pause/Play, Zauberstab, Link und Ordner werden beim Klick kurz fett und etwas größer.
+- Das Herz bleibt die Ausnahme: großes rotes Herz, das im Foto aufploppt.
 
 **Neu in 1.0.20**
 - „Passt nicht“ (Daumen runter) zeigt sofort eine Rückmeldung: Das Foto wird abgedunkelt mit „Passt nicht – suche Ersatz …“, bis das neue Foto da ist.
@@ -114,7 +109,7 @@ Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 **Hinweis:** Wer noch 1.0.0 oder 1.0.1 nutzt, installiert einmal von Hand (alte App ersetzen). Ab 1.0.2 geht jedes Update automatisch über „Jetzt aktualisieren“.
 
 **Installation**
-1. `Polux-1.0.21.zip` herunterladen und entpacken.
+1. `Polux-1.0.22.zip` herunterladen und entpacken.
 2. `Polux.app` in den Ordner **Programme** ziehen.
 3. Beim ersten Start **Rechtsklick → Öffnen** (die App ist nicht von Apple notarisiert).
    Meldet macOS „beschädigt“: im Terminal `xattr -dr com.apple.quarantine /Applications/Polux.app` ausführen.

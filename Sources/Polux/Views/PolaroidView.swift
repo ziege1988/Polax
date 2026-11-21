@@ -31,6 +31,7 @@ struct PolaroidView: View {
     @State private var showDrawer = false
     @State private var heartPulse = false
     @State private var flash: PhotoFlash?
+    @State private var folderBump = false
 
     /// Außenabstand für den Schatten.
     static let shadowMargin: CGFloat = 26
@@ -258,11 +259,7 @@ struct PolaroidView: View {
                 PolaroidIconButton(systemName: "wand.and.stars", size: icon * 0.9,
                                    color: engine.isFocusActive ? Theme.heart : Theme.ink,
                                    help: engine.isFocusActive ? "„Mehr davon“ beenden" : "Mehr davon – ähnliche Fotos suchen") {
-                    let wasActive = engine.isFocusActive
                     engine.moreLikeCurrent()
-                    showFlash("wand.and.stars", color: .white,
-                              text: wasActive ? "„Mehr davon“ beendet"
-                                              : "Mehr davon" + (engine.focus.map { ": " + $0.label } ?? ""))
                 }
                 .disabled(engine.current == nil)
 
@@ -270,7 +267,6 @@ struct PolaroidView: View {
                                    help: "Originalquelle öffnen") {
                     if let c = engine.current?.candidate {
                         NSWorkspace.shared.open(c.pageURL ?? c.imageURL)
-                        showFlash("arrow.up.forward.square.fill", color: .white, text: "Quelle im Browser geöffnet")
                     }
                 }
                 .disabled(engine.current == nil)
@@ -279,24 +275,17 @@ struct PolaroidView: View {
 
                 PolaroidIconButton(systemName: "chevron.left", size: icon * 0.9, help: "Vorheriges Foto") {
                     engine.previous()
-                    showFlash("chevron.left.circle.fill", color: .white, text: nil)
                 }
                 .disabled(engine.index <= 0)
                 .opacity(engine.index <= 0 ? 0.35 : 1)
 
                 PolaroidIconButton(systemName: settings.isPaused ? "play.circle" : "pause.circle",
                                    size: icon, help: settings.isPaused ? "Fortsetzen" : "Pause") {
-                    let willPause = !settings.isPaused
                     engine.togglePause()
-                    showFlash(willPause ? "pause.circle.fill" : "play.circle.fill", color: .white,
-                              text: willPause ? "Pausiert" : "Läuft wieder")
                 }
 
                 PolaroidIconButton(systemName: "chevron.right", size: icon * 0.9, help: "Nächstes Foto") {
-                    let needsSearch = engine.index >= engine.history.count - 1
                     engine.next()
-                    showFlash("chevron.right.circle.fill", color: .white,
-                              text: needsSearch ? "Nächstes Foto wird gesucht …" : nil)
                 }
             }
 
@@ -347,7 +336,10 @@ struct PolaroidView: View {
                     ForEach(others) { c in
                         Button {
                             engine.addCurrent(to: c.id)
-                            showFlash("folder.fill.badge.plus", color: .white, text: "Zu „\(c.name)“ hinzugefügt")
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) { folderBump = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                withAnimation(.easeOut(duration: 0.2)) { folderBump = false }
+                            }
                         } label: {
                             if let id = engine.current?.candidate.id, store.isLiked(id, in: c.id) {
                                 Label(c.name, systemImage: "checkmark")
@@ -361,9 +353,10 @@ struct PolaroidView: View {
             Divider()
             Button("Neue Sammlung …") { Router.shared.openSettings(.collections) }
         } label: {
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: icon * 0.95))
+            Image(systemName: folderBump ? "folder.fill.badge.plus" : "folder.badge.plus")
+                .font(.system(size: icon * 0.95, weight: folderBump ? .bold : .regular))
                 .foregroundColor(Theme.ink)
+                .scaleEffect(folderBump ? 1.22 : 1)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)

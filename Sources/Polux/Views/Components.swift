@@ -148,11 +148,21 @@ struct PolaroidIconButton: View {
     var help: String
     let action: () -> Void
 
+    /// Kurzes „Aufploppen“ nach dem Klick: Symbol wird fett und etwas größer.
+    @State private var bump = false
+
     var body: some View {
-        Button(action: action) {
+        Button {
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) { bump = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                withAnimation(.easeOut(duration: 0.2)) { bump = false }
+            }
+            action()
+        } label: {
             Image(systemName: systemName)
-                .font(.system(size: size, weight: .regular))
+                .font(.system(size: size, weight: bump ? .bold : .regular))
                 .foregroundColor(color)
+                .scaleEffect(bump ? 1.22 : 1)
                 .frame(width: size * 1.5, height: size * 1.5)
                 .contentShape(Rectangle())
         }
