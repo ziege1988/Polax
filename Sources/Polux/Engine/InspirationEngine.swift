@@ -26,6 +26,8 @@ final class InspirationEngine: ObservableObject {
     let settings: AppSettings
 
     private var pools: [UUID: [PhotoCandidate]] = [:]
+    /// Zuletzt geholte Ergebnisseite je Sammlung/Quelle/Suchbegriff.
+    private var pageCursor: [String: Int] = [:]
     private var analyses: [String: ImageAnalysis] = [:]
     private var profiles: [UUID: StyleProfile] = [:]
     private var timer: Timer?
@@ -51,6 +53,9 @@ final class InspirationEngine: ObservableObject {
 
         store.changes
             .sink { [weak self] id in self?.collectionDidChange(id) }
+            .store(in: &bag)
+        store.profileChanges
+            .sink { [weak self] id in self?.profiles[id] = nil }
             .store(in: &bag)
         store.$currentCollectionID
             .removeDuplicates()
@@ -432,10 +437,18 @@ final class InspirationEngine: ObservableObject {
             var queriesBySource: [SourceKind: String] = [:]
             for kind in kinds { queriesBySource[kind] = queries.randomElement() ?? col.name }
             let plannedQueries = queriesBySource
+            // Fortlaufend blättern statt immer nur die ersten Seiten: jede Suche holt die nächste Seite.
+            var plannedPages: [SourceKind: Int] = [:]
+            for kind in kinds {
+                let key = "\(colID)|\(kind.rawValue)|\(queriesBySource[kind] ?? "")"
+                let next = (pageCursor[key] ?? 0) + 1
+                pageCursor[key] = next > 40 ? 1 : next
+                plannedPages[kind] = pageCursor[key]
+            }
             let results = await withTaskGroup(of: (SourceKind, Result<[PhotoCandidate], Error>).self) { group -> [(SourceKind, Result<[PhotoCandidate], Error>)] in
                 for kind in kinds {
                     let query = plannedQueries[kind] ?? col.name
-                    let page = attempt == 0 ? Int.random(in: 1...3) : 1
+                    let page = plannedPages[kind] ?? 1
                     group.addTask {
                         do {
                             return (kind, .success(try await Providers.provider(for: kind).search(query: query, collection: col, page: page)))

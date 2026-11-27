@@ -1,6 +1,13 @@
-## Polux 1.0.22
+## Polux 1.0.23
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.23**
+- „Passt nicht“ verwirft die vorbereiteten Vorschläge nicht mehr – der Vorrat bleibt erhalten
+- Ablehnungen werten die eigenen Schlagwörter und Personen-/Aktbegriffe nicht mehr ab
+- Polux blättert bei jeder Quelle fortlaufend weiter statt immer nur die ersten Seiten zu laden
+- DeviantArt sucht mit dem ganzen Suchbegriff (z. B. „experimental nude“) statt nur einem Einzelwort
+- Experimentelle Akte werden über ihre Schlagwörter als Personenfoto erkannt, auch wenn Vision keine Person findet
 
 **Neu in 1.0.22**
 - Klick-Rückmeldung direkt am Knopf: Pfeile, Pause/Play, Zauberstab, Link und Ordner werden beim Klick kurz fett und etwas größer.

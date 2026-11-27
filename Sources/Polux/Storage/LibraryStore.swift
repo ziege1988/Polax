@@ -12,6 +12,9 @@ final class LibraryStore: ObservableObject {
 
     /// Meldet Änderungen, die Suche oder Stilprofil einer Sammlung betreffen.
     let changes = PassthroughSubject<UUID, Never>()
+    /// Nur der gelernte Stil hat sich geändert (Like, Ablehnung) – die Suche bleibt gleich,
+    /// vorbereitete Kandidaten werden NICHT verworfen.
+    let profileChanges = PassthroughSubject<UUID, Never>()
 
     private var seenSets: [UUID: Set<String>] = [:]
     private var saveWork: DispatchWorkItem?
@@ -121,27 +124,43 @@ final class LibraryStore: ObservableObject {
         }
         let like = LikedPhoto(id: candidate.id, candidate: candidate, analysis: analysis, likedAt: Date(),
                               fileName: fileName, aspect: max(0.2, min(5, aspect)), bytes: imageData.count)
-        mutate(collectionID) { c in
+        mutate(collectionID, notify: false) { c in
             c.likes.removeAll { $0.id == like.id }
             c.likes.append(like)
         }
+        profileChanges.send(collectionID)
     }
 
     /// Entfernt ein Like. Mit `reject` merkt sich die Sammlung den Stil als „nicht gewünscht".
     func removeLike(_ photoID: String, from collectionID: UUID, reject: Bool) {
         guard let c = collection(collectionID), let like = c.likes.first(where: { $0.id == photoID }) else { return }
         try? FileManager.default.removeItem(at: likeFileURL(like, in: collectionID))
-        mutate(collectionID) { c in
+        mutate(collectionID, notify: false) { c in
             c.likes.removeAll { $0.id == photoID }
             guard reject else { return }
-            let terms = StyleEngine.terms(of: like.candidate.tags + (like.analysis?.labels ?? []))
-            for t in terms { c.rejectedTags[t, default: 0] += 1 }
+            for t in Self.rejectableTerms(like.candidate.tags + (like.analysis?.labels ?? []), in: c) {
+                c.rejectedTags[t, default: 0] += 1
+            }
             if let fp = like.analysis?.featurePrint {
                 c.rejectedPrints.append(fp)
                 if c.rejectedPrints.count > Self.maxRejectedPrints {
                     c.rejectedPrints.removeFirst(c.rejectedPrints.count - Self.maxRejectedPrints)
                 }
             }
+        }
+        profileChanges.send(collectionID)
+    }
+
+    /// Begriffe, die eine Ablehnung abwerten darf: nicht die eigenen Schlagwörter,
+    /// nicht Personen-/Motivwörter (sonst würde z. B. jedes abgelehnte Aktfoto „nude“ abwerten).
+    static func rejectableTerms(_ tags: [String], in c: PhotoCollection) -> Set<String> {
+        var protected = Set(c.keywords.flatMap { StyleEngine.keywordTokens($0) })
+        protected.formUnion(StyleEngine.peopleWords)
+        protected.formUnion(SubjectFocus.female.positiveWords)
+        protected.formUnion(SubjectFocus.male.positiveWords)
+        protected.formUnion(SubjectFocus.couple.positiveWords)
+        return StyleEngine.terms(of: tags).filter { term in
+            !protected.contains(term) && !protected.contains { StyleEngine.fuzzyEqual($0, term) }
         }
     }
 
@@ -156,8 +175,8 @@ final class LibraryStore: ObservableObject {
 
     /// „Passt nicht“: Stil des Fotos als Negativ-Signal merken (ohne dass es gelikt war).
     func reject(candidate: PhotoCandidate, analysis: ImageAnalysis?, in collectionID: UUID) {
-        mutate(collectionID) { c in
-            for t in StyleEngine.terms(of: candidate.tags + (analysis?.labels ?? [])) {
+        mutate(collectionID, notify: false) { c in
+            for t in Self.rejectableTerms(candidate.tags + (analysis?.labels ?? []), in: c) {
                 c.rejectedTags[t, default: 0] += 1
             }
             if let fp = analysis?.featurePrint {
@@ -167,6 +186,7 @@ final class LibraryStore: ObservableObject {
                 }
             }
         }
+        profileChanges.send(collectionID)
     }
 
     func resetRejections(_ collectionID: UUID) {

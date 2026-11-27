@@ -184,4 +184,26 @@ final class PinterestAndUpdateTests: XCTestCase {
                        "abcdef0123456789abcdef0123456789")
         XCTAssertEqual(DeviantArtAuth.clean("client_secret: \"abc123\"", digitsOnly: false), "abc123")
     }
+
+    // MARK: Ablehnungen
+
+    @MainActor
+    func testRejectionDoesNotPenalizeOwnKeywordsOrPeople() {
+        let c = PhotoCollection(name: "Test", keywords: ["experimental nude"])
+        let terms = LibraryStore.rejectableTerms(["experimental", "nude", "woman", "neon", "graffiti"], in: c)
+        XCTAssertFalse(terms.contains("experimental"))
+        XCTAssertFalse(terms.contains("nude"))
+        XCTAssertFalse(terms.contains("woman"))
+        XCTAssertTrue(terms.contains("graffiti"))
+    }
+
+    func testExperimentalNudeTaggedCountsAsPerson() {
+        let c = PhotoCollection(name: "Test", keywords: ["experimental nude"])
+        let cand = PhotoCandidate(id: "x", source: .deviantart, origin: "deviantart", title: "Untitled",
+                                  author: "a", imageURL: URL(string: "https://example.com/a.jpg")!,
+                                  fallbackImageURL: nil, thumbURL: URL(string: "https://example.com/a.jpg")!,
+                                  pageURL: nil, tags: ["experimental nude"], query: "experimental nude")
+        let empty = ImageAnalysis(labels: [], featurePrint: nil, luminance: 0.2, saturation: 0.2, personCount: 0)
+        XCTAssertFalse(StyleEngine.lacksPeople(empty, collection: c, candidate: cand))
+    }
 }

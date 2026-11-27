@@ -400,8 +400,11 @@ enum StyleEngine {
     }
 
     /// Ohne erkannte Person, obwohl die Sammlung Personen verlangt (Stillleben, Landschaft, Abstraktes)?
-    static func lacksPeople(_ a: ImageAnalysis?, collection: PhotoCollection) -> Bool {
+    static func lacksPeople(_ a: ImageAnalysis?, collection: PhotoCollection, candidate: PhotoCandidate? = nil) -> Bool {
         guard collection.requirePeople || collection.subject != .any else { return false }
+        // Experimentelle Akte (Unschärfe, Doppelbelichtung, Verfremdung) erkennt die Bilderkennung oft nicht
+        // als Person – sagen Titel/Tags eindeutig „nude“, „model“, „body“ …, gilt das als Person.
+        if let c = candidate, !candidateWords(c).isDisjoint(with: peopleWords) { return false }
         guard let a, let n = a.personCount else { return true }   // nicht prüfbar → lieber aussortieren
         if n > 0 { return false }
         // Detailaufnahmen ohne Gesicht/Körper (Hände mit Ringen, Anstecker) zählen über die Motiv-Labels.
@@ -453,7 +456,7 @@ enum StyleEngine {
            keywordMatch(c, analysis: a, collection: collection) < keywordThreshold { return FilterReason.keyword }
         if matchesExcludedWords(c, analysis: a, collection: collection) { return FilterReason.excludedWord }
         if looksLikeClassicPainting(c, a) { return FilterReason.paintingVision }
-        if lacksPeople(a, collection: collection) { return FilterReason.noPerson }
+        if lacksPeople(a, collection: collection, candidate: c) { return FilterReason.noPerson }
         return nil
     }
 
@@ -471,7 +474,7 @@ enum StyleEngine {
         // Motiv-Prüfung am Bild: Bei Frau/Mann/Paar Fotos ohne erkannte Person aussortieren.
         var list = list
         if collection.subject != .any || collection.requirePeople {
-            let withPeople = list.filter { c in !lacksPeople(analyses[c.id], collection: collection) }
+            let withPeople = list.filter { c in !lacksPeople(analyses[c.id], collection: collection, candidate: c) }
             if !withPeople.isEmpty { list = withPeople }
         }
         // Etwas Zufall, damit die Sammlung nicht in einer Stil-Blase festhängt.

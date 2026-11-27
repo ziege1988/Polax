@@ -367,6 +367,26 @@ struct DeviantArtProvider: ImageProvider {
     let kind = SourceKind.deviantart
 
     private struct Response: Decodable { let results: [Item] }
+
+    /// Ruft einen DeviantArt-Browse-Endpunkt ab; liefert die Treffer oder einen verständlichen Fehler.
+    private func fetch(_ path: String, _ items: [URLQueryItem], token: String) async throws -> [Item] {
+        var comps = URLComponents(string: "https://www.deviantart.com/api/v1/oauth2/" + path)!
+        comps.queryItems = items + [.init(name: "access_token", value: token)]
+        var req = URLRequest(url: comps.url!, timeoutInterval: 25)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await HTTP.session.data(for: req)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else {
+            struct Err: Decodable { let error: String?; let error_description: String? }
+            let e = try? JSONDecoder().decode(Err.self, from: data)
+            if code == 401 || code == 403 { await DeviantArtAuth.shared.reset() }
+            throw ProviderError.api("DeviantArt: Anmeldung ok, aber Abruf abgelehnt – "
+                                    + (e?.error_description ?? "HTTP \(code)"))
+        }
+        return try JSONDecoder().decode(Response.self, from: data).results
+    }
+
     private struct Item: Decodable {
         let deviationid: String
         let title: String?
@@ -382,32 +402,38 @@ struct DeviantArtProvider: ImageProvider {
 
     func search(query: String, collection: PhotoCollection, page: Int) async throws -> [PhotoCandidate] {
         let token = try await DeviantArtAuth.shared.accessToken()
-        // DeviantArt sucht über einzelne Tags ohne Leerzeichen – wir nehmen das aussagekräftigste Wort.
+        let offset = String((page - 1) * 24)
+        let mature = collection.allowNudity ? "true" : "false"
         let words = query.lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { $0.count >= 3 }
-        let tag = words.max(by: { $0.count < $1.count }) ?? "photography"
-        var comps = URLComponents(string: "https://www.deviantart.com/api/v1/oauth2/browse/tags")!
-        comps.queryItems = [
-            .init(name: "tag", value: tag),
-            .init(name: "limit", value: "24"),
-            .init(name: "offset", value: String((page - 1) * 24)),
-            .init(name: "mature_content", value: collection.allowNudity ? "true" : "false"),
-            .init(name: "access_token", value: token)
-        ]
-        var req = URLRequest(url: comps.url!, timeoutInterval: 25)
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await HTTP.session.data(for: req)
-        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard (200..<300).contains(code) else {
-            struct Err: Decodable { let error: String?; let error_description: String? }
-            let e = try? JSONDecoder().decode(Err.self, from: data)
-            if code == 401 || code == 403 { await DeviantArtAuth.shared.reset() }
-            throw ProviderError.api("DeviantArt: Anmeldung ok, aber Abruf abgelehnt – "
-                                    + (e?.error_description ?? "HTTP \(code)"))
+
+        // 1) Volltextsuche mit dem ganzen Suchbegriff („experimental nude“ statt nur „experimental“)
+        var results: [Item] = []
+        var usedTags: [String] = words
+        if let found = try? await fetch("browse/popular", [
+            .init(name: "q", value: query), .init(name: "timerange", value: "alltime"),
+            .init(name: "limit", value: "24"), .init(name: "offset", value: offset),
+            .init(name: "mature_content", value: mature)], token: token), !found.isEmpty {
+            results = found
+        } else if let found = try? await fetch("browse/newest", [
+            .init(name: "q", value: query), .init(name: "limit", value: "24"),
+            .init(name: "offset", value: offset), .init(name: "mature_content", value: mature)], token: token),
+                  !found.isEmpty {
+            results = found
+        } else {
+            // 2) Rückfall: Tag-Suche – reihum über die Wörter des Suchbegriffs statt immer nur das längste
+            let generic = StyleEngine.genericTokens
+            let candidates = words.filter { !generic.contains($0) }
+            let pool = candidates.isEmpty ? words : candidates
+            let tag = pool.isEmpty ? "photography" : pool[(page - 1) % pool.count]
+            usedTags = [tag]
+            results = try await fetch("browse/tags", [
+                .init(name: "tag", value: tag), .init(name: "limit", value: "24"),
+                .init(name: "offset", value: offset), .init(name: "mature_content", value: mature)], token: token)
         }
-        let resp = try JSONDecoder().decode(Response.self, from: data)
+        let resp = Response(results: results)
+        let tag = usedTags.joined(separator: " ")
         return resp.results.compactMap { r in
             if !collection.allowNudity, r.is_mature == true { return nil }
             guard let img = HTTP.secureURL(r.content?.src ?? r.preview?.src) else { return nil }
