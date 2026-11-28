@@ -1,6 +1,10 @@
-## Polux 1.0.25
+## Polux 1.0.26
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
+
+**Neu in 1.0.26**
+- DeviantArt-Konto-Anmeldung behoben („code_challenge parameter is required“): Die Anmeldung nutzt jetzt das von DeviantArt verlangte PKCE-Verfahren.
+- Fehlermeldungen von DeviantArt werden lesbar angezeigt (ohne „+“ zwischen den Wörtern).
 
 **Neu in 1.0.25**
 - **Anmeldung mit dem eigenen DeviantArt-Konto** (Einstellungen → Bildquellen → DeviantArt → „Mit DeviantArt anmelden …“). Damit gelten deine Konto-Einstellungen für nicht jugendfreie Inhalte – Akt-Fotos kommen unverwischt.

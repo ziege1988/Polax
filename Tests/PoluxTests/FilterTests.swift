@@ -227,4 +227,13 @@ final class PinterestAndUpdateTests: XCTestCase {
                        "https://images-wixmp.com/f/x/v1/fill/w_300,h_400,q_70,strp/a.jpg?token=t")
         XCTAssertEqual(DeviantArtProvider.unblurred("https://a.com/b.jpg"), "https://a.com/b.jpg")
     }
+
+    func testPKCEChallenge() {
+        // Beispiel aus RFC 7636, Anhang B
+        XCTAssertEqual(DeviantArtAuth.codeChallenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+                       "E9Melhoa2OwvFrEMTJguCB4khoGwi0MdtD-vqP2c0hM")
+        let v = DeviantArtAuth.makeCodeVerifier()
+        XCTAssertGreaterThanOrEqual(v.count, 43)
+        XCTAssertFalse(v.contains("=") || v.contains("+") || v.contains("/"))
+    }
 }

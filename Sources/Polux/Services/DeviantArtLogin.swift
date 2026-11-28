@@ -25,14 +25,15 @@ final class DeviantArtLogin: NSObject, ObservableObject, ASWebAuthenticationPres
         guard !busy else { return }
         message = nil
         let state = UUID().uuidString
+        let verifier = DeviantArtAuth.makeCodeVerifier()
         let url: URL
-        do { url = try DeviantArtAuth.authorizeURL(state: state) } catch {
+        do { url = try DeviantArtAuth.authorizeURL(state: state, verifier: verifier) } catch {
             message = "Bitte zuerst Client ID und Client Secret eintragen."
             return
         }
         busy = true
         let s = ASWebAuthenticationSession(url: url, callbackURLScheme: DeviantArtAuth.callbackScheme) { [weak self] cb, error in
-            Task { @MainActor in await self?.finish(callback: cb, error: error, state: state) }
+            Task { @MainActor in await self?.finish(callback: cb, error: error, state: state, verifier: verifier) }
         }
         anchor = NSApp.keyWindow ?? NSApp.windows.first { $0.isVisible }
         s.presentationContextProvider = self
@@ -44,7 +45,7 @@ final class DeviantArtLogin: NSObject, ObservableObject, ASWebAuthenticationPres
         }
     }
 
-    private func finish(callback: URL?, error: Error?, state: String) async {
+    private func finish(callback: URL?, error: Error?, state: String, verifier: String) async {
         defer { busy = false; session = nil }
         if let error {
             if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin { return }
@@ -56,7 +57,8 @@ final class DeviantArtLogin: NSObject, ObservableObject, ASWebAuthenticationPres
             return
         }
         if let err = items.first(where: { $0.name == "error" })?.value {
-            let desc = items.first(where: { $0.name == "error_description" })?.value
+            let desc = items.first(where: { $0.name == "error_description" })?.value?
+                .replacingOccurrences(of: "+", with: " ")
             message = Self.explainAuthorizeError(err, desc)
             return
         }
@@ -66,7 +68,7 @@ final class DeviantArtLogin: NSObject, ObservableObject, ASWebAuthenticationPres
             return
         }
         do {
-            let user = try await DeviantArtAuth.shared.completeLogin(code: code)
+            let user = try await DeviantArtAuth.shared.completeLogin(code: code, verifier: verifier)
             refreshState()
             username = user
             message = nil

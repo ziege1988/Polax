@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import Security
 
 protocol ImageProvider {
     var kind: SourceKind { get }
@@ -318,7 +320,25 @@ actor DeviantArtAuth {
     }
 
     /// Adresse der DeviantArt-Anmeldeseite für das eigene Konto.
-    static func authorizeURL(state: String) throws -> URL {
+    /// PKCE: zufälliger Prüfwert für die Anmeldung (von DeviantArt verlangt).
+    static func makeCodeVerifier() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return base64URL(Data(bytes))
+    }
+
+    static func codeChallenge(for verifier: String) -> String {
+        base64URL(Data(SHA256.hash(data: Data(verifier.utf8))))
+    }
+
+    static func base64URL(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    static func authorizeURL(state: String, verifier: String) throws -> URL {
         let c = try credentials()
         var comps = URLComponents(string: "https://www.deviantart.com/oauth2/authorize")!
         comps.queryItems = [
@@ -326,17 +346,19 @@ actor DeviantArtAuth {
             .init(name: "client_id", value: c.id),
             .init(name: "redirect_uri", value: redirectURI),
             .init(name: "scope", value: scopes),
-            .init(name: "state", value: state)
+            .init(name: "state", value: state),
+            .init(name: "code_challenge", value: codeChallenge(for: verifier)),
+            .init(name: "code_challenge_method", value: "S256")
         ]
         return comps.url!
     }
 
     /// Tauscht den Code aus der Anmeldung gegen Tokens und merkt sich das Konto.
-    func completeLogin(code: String) async throws -> String {
+    func completeLogin(code: String, verifier: String) async throws -> String {
         let c = try Self.credentials()
         try await tokenRequest([
             "grant_type": "authorization_code", "client_id": c.id, "client_secret": c.secret,
-            "redirect_uri": Self.redirectURI, "code": code])
+            "redirect_uri": Self.redirectURI, "code": code, "code_verifier": verifier])
         let user = await Self.whoami(token: token ?? "") ?? "DeviantArt-Konto"
         Keychain.set(user, for: .deviantartUser)
         UserDefaults.standard.set(false, forKey: "deviantartLoginExpired")
