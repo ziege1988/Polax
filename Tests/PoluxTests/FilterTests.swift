@@ -231,7 +231,7 @@ final class PinterestAndUpdateTests: XCTestCase {
     func testPKCEChallenge() {
         // Beispiel aus RFC 7636, Anhang B
         XCTAssertEqual(DeviantArtAuth.codeChallenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
-                       "E9Melhoa2OwvFrEMTJguCB4khoGwi0MdtD-vqP2c0hM")
+                       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
         let v = DeviantArtAuth.makeCodeVerifier()
         XCTAssertGreaterThanOrEqual(v.count, 43)
         XCTAssertFalse(v.contains("=") || v.contains("+") || v.contains("/"))
