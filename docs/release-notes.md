@@ -1,8 +1,12 @@
-## Polux 1.0.24
+## Polux 1.0.25
 
 Polaroid-Inspirations-Widget für macOS (ab macOS 13, Apple Silicon und Intel).
 
-**Neu in 1.0.24**
+**Neu in 1.0.25**
+- **Anmeldung mit dem eigenen DeviantArt-Konto** (Einstellungen → Bildquellen → DeviantArt → „Mit DeviantArt anmelden …“). Damit gelten deine Konto-Einstellungen für nicht jugendfreie Inhalte – Akt-Fotos kommen unverwischt.
+- Einmalig nötig: In den DeviantArt-App-Einstellungen unter „OAuth2 Redirect URI Whitelist“ `polux://deviantart-login` eintragen.
+- Die Anmeldung bleibt erhalten und erneuert sich selbst; läuft sie ab, nutzt Polux automatisch wieder den App-Zugang und zeigt einen Hinweis.
+
 - Keine verwischten Fotos mehr: Manche Plattformen liefern Aktfotos ohne Benutzer-Anmeldung absichtlich unscharf aus. Polux erkennt solche Bilder und sortiert sie aus (im Protokoll: „Unscharf (von der Quelle verwischt)“).
 - DeviantArt: Eine Weichzeichner-Anweisung in der Bildadresse wird entfernt, damit das scharfe Bild geladen wird.
 

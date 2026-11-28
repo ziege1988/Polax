@@ -90,7 +90,8 @@ final class ConnectionTester: ObservableObject {
                 .search(query: "portrait", collection: probe, page: 1)
             statuses[kind] = results.isEmpty
                 ? .failed("Verbunden, aber keine Testtreffer – bitte später erneut testen.")
-                : .ok("Verbunden · \(results.count) Testtreffer")
+                : .ok((kind == .deviantart && DeviantArtAuth.hasUserLogin ? "Verbunden mit Konto" : "Verbunden")
+                      + " · \(results.count) Testtreffer")
         } catch {
             statuses[kind] = .failed(Self.describe(error, kind))
         }

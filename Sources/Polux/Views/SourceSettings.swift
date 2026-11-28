@@ -84,8 +84,10 @@ struct SourceInfo {
                 steps: [
                     "Auf deviantart.com anmelden und die Entwicklerseite öffnen.",
                     "„Register your Application“ wählen und einen Namen eintragen.",
-                    "Bei „OAuth2 Redirect URI Whitelist“ z. B. https://localhost eintragen (wird von Polux nicht genutzt, ist aber Pflicht).",
-                    "Speichern und anschließend **client_id** und **client_secret** kopieren und oben einfügen."
+                    "Bei „OAuth2 Redirect URI Whitelist“ **polux://deviantart-login** eintragen (bereits vorhandene Einträge dürfen bleiben) und speichern.",
+                    "**client_id** und **client_secret** kopieren und oben einfügen.",
+                    "Unten auf **„Mit DeviantArt anmelden“** klicken und im Fenster dein Konto bestätigen.",
+                    "Für Akt-Inhalte im DeviantArt-Konto unter Einstellungen → Allgemein die Anzeige nicht jugendfreier Inhalte erlauben (Geburtsdatum muss hinterlegt sein)."
                 ],
                 link: "https://www.deviantart.com/developers/apps", linkTitle: "DeviantArt-Apps verwalten", note: nil)
         }
@@ -285,6 +287,17 @@ struct SourceDetailView: View {
                 }
             }
 
+            if kind == .deviantart {
+                Section {
+                    DeviantArtAccountRow()
+                } header: {
+                    Text("Eigenes DeviantArt-Konto")
+                } footer: {
+                    Text("Ohne Konto-Anmeldung liefert DeviantArt Akt-Inhalte oft verwischt oder gar nicht. Mit deinem Konto gelten deine Einstellungen für nicht jugendfreie Inhalte. Dein Passwort gibst du nur bei DeviantArt ein – Polux speichert lediglich ein Anmelde-Token im Schlüsselbund.")
+                        .font(.caption).foregroundColor(.secondary)
+                }
+            }
+
             if kind != .rss {
                 Section("Verbindung") {
                     ConnectionRow(kind: kind)
@@ -338,6 +351,39 @@ struct SourceDetailView: View {
                 Task { @MainActor in await ConnectionTester.shared.test(kind) }
             }
         }
+    }
+}
+
+/// Anmelden/Abmelden mit dem eigenen DeviantArt-Konto.
+struct DeviantArtAccountRow: View {
+    @ObservedObject private var login = DeviantArtLogin.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                if login.isLoggedIn {
+                    Label("Angemeldet als \(login.username ?? "DeviantArt-Konto")", systemImage: "person.crop.circle.badge.checkmark")
+                        .foregroundColor(.green)
+                    Spacer()
+                    Button("Abmelden") { Task { await login.logout() } }
+                } else {
+                    Label(login.loginExpired ? "Anmeldung abgelaufen – bitte neu anmelden" : "Nicht angemeldet",
+                          systemImage: "person.crop.circle.badge.questionmark")
+                        .foregroundColor(login.loginExpired ? .orange : .secondary)
+                    Spacer()
+                    if login.busy { ProgressView().controlSize(.small) }
+                    Button("Mit DeviantArt anmelden …") { login.login() }
+                        .disabled(login.busy || !Providers.hasCredentials(.deviantart))
+                }
+            }
+            if !Providers.hasCredentials(.deviantart), !login.isLoggedIn {
+                Text("Erst Client ID und Client Secret eintragen.").font(.caption).foregroundColor(.secondary)
+            }
+            if let m = login.message {
+                Text(m).font(.caption).foregroundColor(.red).textSelection(.enabled)
+            }
+        }
+        .onAppear { login.refreshState() }
     }
 }
 

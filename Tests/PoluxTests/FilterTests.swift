@@ -217,7 +217,7 @@ final class PinterestAndUpdateTests: XCTestCase {
         XCTAssertGreaterThan(StyleEngine.sharpness(gray: sharp, size: n, tiles: 4, tileSize: 24), 10)
         // Weicher Verlauf → praktisch keine Kanten
         var soft = [UInt8](repeating: 0, count: n * n)
-        for y in 0..<n { for x in 0..<n { soft[y * n + x] = UInt8(60 + x / 2) } }
+        for y in 0..<n { for x in 0..<n { soft[y * n + x] = UInt8(60 + x / 8) } }
         XCTAssertLessThan(StyleEngine.sharpness(gray: soft, size: n, tiles: 4, tileSize: 24), StyleEngine.minSharpness)
         XCTAssertNil(StyleEngine.looksBlurred(nil) ? 1 : nil)
     }

@@ -8,6 +8,9 @@ enum CredentialKey: String, CaseIterable {
     case pexels = "pexels.apiKey"
     case deviantartID = "deviantart.clientID"
     case deviantartSecret = "deviantart.clientSecret"
+    /// Langlebiges Anmelde-Token des eigenen DeviantArt-Kontos (rotiert bei jeder Erneuerung).
+    case deviantartRefresh = "deviantart.refreshToken"
+    case deviantartUser = "deviantart.username"
 }
 
 enum Keychain {

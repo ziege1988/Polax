@@ -274,8 +274,17 @@ actor DeviantArtAuth {
     private var token: String?
     private var expiry = Date.distantPast
 
+    /// Muss bei DeviantArt unter „OAuth2 Redirect URI Whitelist“ eingetragen sein.
+    static let redirectURI = "polux://deviantart-login"
+    static let callbackScheme = "polux"
+    static let scopes = "browse user"
+
+    /// Angemeldet mit dem eigenen Konto (Akt-Inhalte unverwischt, eigene Filtereinstellungen).
+    nonisolated static var hasUserLogin: Bool { Keychain.has(.deviantartRefresh) }
+
     private struct TokenResponse: Decodable {
         let access_token: String?
+        let refresh_token: String?
         let expires_in: Double?
         let error: String?
         let error_description: String?
@@ -300,8 +309,96 @@ actor DeviantArtAuth {
         return parts.last ?? trimmed
     }
 
+    /// Für die App-Daten (client_id, client_secret).
+    private static func credentials() throws -> (id: String, secret: String) {
+        guard let rawID = Keychain.get(.deviantartID), let rawSecret = Keychain.get(.deviantartSecret) else {
+            throw ProviderError.missingCredentials(.deviantart)
+        }
+        return (clean(rawID, digitsOnly: true), clean(rawSecret, digitsOnly: false))
+    }
+
+    /// Adresse der DeviantArt-Anmeldeseite für das eigene Konto.
+    static func authorizeURL(state: String) throws -> URL {
+        let c = try credentials()
+        var comps = URLComponents(string: "https://www.deviantart.com/oauth2/authorize")!
+        comps.queryItems = [
+            .init(name: "response_type", value: "code"),
+            .init(name: "client_id", value: c.id),
+            .init(name: "redirect_uri", value: redirectURI),
+            .init(name: "scope", value: scopes),
+            .init(name: "state", value: state)
+        ]
+        return comps.url!
+    }
+
+    /// Tauscht den Code aus der Anmeldung gegen Tokens und merkt sich das Konto.
+    func completeLogin(code: String) async throws -> String {
+        let c = try Self.credentials()
+        try await tokenRequest([
+            "grant_type": "authorization_code", "client_id": c.id, "client_secret": c.secret,
+            "redirect_uri": Self.redirectURI, "code": code])
+        let user = await Self.whoami(token: token ?? "") ?? "DeviantArt-Konto"
+        Keychain.set(user, for: .deviantartUser)
+        UserDefaults.standard.set(false, forKey: "deviantartLoginExpired")
+        return user
+    }
+
+    func logout() {
+        Keychain.set("", for: .deviantartRefresh)
+        Keychain.set("", for: .deviantartUser)
+        reset()
+    }
+
+    /// POST an den Token-Endpunkt; speichert Access- und (neues) Refresh-Token.
+    @discardableResult
+    private func tokenRequest(_ fields: [String: String]) async throws -> TokenResponse {
+        var form = URLComponents()
+        form.queryItems = fields.map { URLQueryItem(name: $0.key, value: $0.value) }
+        var req = URLRequest(url: URL(string: "https://www.deviantart.com/oauth2/token")!, timeoutInterval: 20)
+        req.httpMethod = "POST"
+        req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.httpBody = (form.percentEncodedQuery ?? "").data(using: .utf8)
+        let (data, response) = try await HTTP.session.data(for: req)
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        let resp = try? JSONDecoder().decode(TokenResponse.self, from: data)
+        guard (200..<300).contains(code), let resp, let t = resp.access_token else {
+            throw ProviderError.api("DeviantArt-Anmeldung abgelehnt: "
+                                    + Self.explain(error: resp?.error, description: resp?.error_description, code: code))
+        }
+        token = t
+        expiry = Date().addingTimeInterval((resp.expires_in ?? 3600) - 120)
+        if let r = resp.refresh_token, !r.isEmpty {
+            Keychain.set(r, for: .deviantartRefresh)
+        }
+        return resp
+    }
+
+    private static func whoami(token: String) async -> String? {
+        guard !token.isEmpty else { return nil }
+        var req = URLRequest(url: URL(string: "https://www.deviantart.com/api/v1/oauth2/user/whoami")!, timeoutInterval: 15)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        struct Who: Decodable { let username: String? }
+        guard let (data, _) = try? await HTTP.session.data(for: req) else { return nil }
+        return (try? JSONDecoder().decode(Who.self, from: data))?.username
+    }
+
     func accessToken() async throws -> String {
         if let t = token, Date() < expiry { return t }
+        // 1) Eigenes Konto: Token erneuern (gilt ca. 3 Monate, verlängert sich bei Nutzung).
+        if let refresh = Keychain.get(.deviantartRefresh) {
+            let c = try Self.credentials()
+            do {
+                try await tokenRequest(["grant_type": "refresh_token", "client_id": c.id,
+                                        "client_secret": c.secret, "refresh_token": refresh])
+                if let t = token { return t }
+            } catch {
+                // Anmeldung abgelaufen/zurückgezogen → abmelden und mit App-Zugang weitermachen.
+                NSLog("Polux: DeviantArt-Konto-Anmeldung abgelaufen: \(error)")
+                Keychain.set("", for: .deviantartRefresh)
+                UserDefaults.standard.set(true, forKey: "deviantartLoginExpired")
+            }
+        }
         guard let rawID = Keychain.get(.deviantartID), let rawSecret = Keychain.get(.deviantartSecret) else {
             throw ProviderError.missingCredentials(.deviantart)
         }
