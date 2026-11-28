@@ -89,6 +89,8 @@ struct ImageAnalysis: Codable, Hashable {
     var textCoverage: Double? = nil
     /// Seitenverhältnis Breite/Höhe.
     var aspect: Double? = nil
+    /// Schärfe der schärfsten Bildregion (mittlere Laplace-Energie, 0…255). Sehr klein = verwischt/zensiert.
+    var sharpness: Double? = nil
 }
 
 /// Ein gelikter, lokal gespeicherter Eintrag einer Sammlung.

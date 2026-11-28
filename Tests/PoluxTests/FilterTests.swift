@@ -206,4 +206,25 @@ final class PinterestAndUpdateTests: XCTestCase {
         let empty = ImageAnalysis(labels: [], featurePrint: nil, luminance: 0.2, saturation: 0.2, personCount: 0)
         XCTAssertFalse(StyleEngine.lacksPeople(empty, collection: c, candidate: cand))
     }
+
+    // MARK: Unschärfe
+
+    func testBlurDetection() {
+        let n = 96
+        // Scharfes Schachbrett → hohe Schärfe
+        var sharp = [UInt8](repeating: 0, count: n * n)
+        for y in 0..<n { for x in 0..<n { sharp[y * n + x] = ((x / 4 + y / 4) % 2 == 0) ? 20 : 200 } }
+        XCTAssertGreaterThan(StyleEngine.sharpness(gray: sharp, size: n, tiles: 4, tileSize: 24), 10)
+        // Weicher Verlauf → praktisch keine Kanten
+        var soft = [UInt8](repeating: 0, count: n * n)
+        for y in 0..<n { for x in 0..<n { soft[y * n + x] = UInt8(60 + x / 2) } }
+        XCTAssertLessThan(StyleEngine.sharpness(gray: soft, size: n, tiles: 4, tileSize: 24), StyleEngine.minSharpness)
+        XCTAssertNil(StyleEngine.looksBlurred(nil) ? 1 : nil)
+    }
+
+    func testDeviantArtUnblurURL() {
+        XCTAssertEqual(DeviantArtProvider.unblurred("https://images-wixmp.com/f/x/v1/fill/w_300,h_400,q_70,strp,blur_30/a.jpg?token=t"),
+                       "https://images-wixmp.com/f/x/v1/fill/w_300,h_400,q_70,strp/a.jpg?token=t")
+        XCTAssertEqual(DeviantArtProvider.unblurred("https://a.com/b.jpg"), "https://a.com/b.jpg")
+    }
 }

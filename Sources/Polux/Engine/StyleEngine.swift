@@ -33,6 +33,7 @@ enum FilterReason {
     static let animeVision = "Cartoon/Anime (Bilderkennung)"
     static let paintingVision = "Gemälde (Bilderkennung)"
     static let nonPhoto = "Text, Plakat oder Streifenformat"
+    static let blurred = "Unscharf (von der Quelle verwischt)"
     static let duplicate = "Doppelt"
     static let seen = "Schon gezeigt"
     static let tooSmall = "Bild nicht ladbar / zu klein"
@@ -452,6 +453,7 @@ enum StyleEngine {
     static func imageReason(_ c: PhotoCandidate, analysis a: ImageAnalysis?, collection: PhotoCollection) -> String? {
         if looksLikePainting(a) { return FilterReason.animeVision }
         if looksLikeNonPhoto(a) { return FilterReason.nonPhoto }
+        if looksBlurred(a) { return FilterReason.blurred }
         if c.source != .rss, !collection.keywords.isEmpty,
            keywordMatch(c, analysis: a, collection: collection) < keywordThreshold { return FilterReason.keyword }
         if matchesExcludedWords(c, analysis: a, collection: collection) { return FilterReason.excludedWord }
@@ -585,7 +587,53 @@ enum StyleEngine {
                              personCount: max(humanCount, faceCount), dhash: dhash(image),
                              artScore: artScore, paintScore: paintScore,
                              textCoverage: min(1, textCoverage),
-                             aspect: Double(image.width) / Double(max(image.height, 1)))
+                             aspect: Double(image.width) / Double(max(image.height, 1)),
+                             sharpness: sharpness(image))
+    }
+
+    /// Unter diesem Wert hat das Bild nirgends eine scharfe Kante – typisch für Bilder, die eine
+    /// Plattform wegen Nacktheit verwischt ausliefert. Bewusste Unschärfe/Bokeh hat fast immer
+    /// noch eine scharfe Region und liegt deutlich darüber.
+    static let minSharpness = 1.0
+
+    static func looksBlurred(_ a: ImageAnalysis?) -> Bool {
+        guard let s = a?.sharpness else { return false }
+        return s < minSharpness
+    }
+
+    /// Schärfe der schärfsten Kachel (4×4-Raster, 96×96 Graustufen, mittlerer |Laplace|).
+    static func sharpness(_ image: CGImage) -> Double? {
+        let n = 96, tiles = 4, t = n / tiles
+        var px = [UInt8](repeating: 0, count: n * n)
+        let ok: Bool = px.withUnsafeMutableBytes { ptr in
+            guard let ctx = CGContext(data: ptr.baseAddress, width: n, height: n, bitsPerComponent: 8,
+                                      bytesPerRow: n, space: CGColorSpaceCreateDeviceGray(),
+                                      bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return false }
+            ctx.interpolationQuality = .medium
+            ctx.draw(image, in: CGRect(x: 0, y: 0, width: n, height: n))
+            return true
+        }
+        guard ok else { return nil }
+        return sharpness(gray: px, size: n, tiles: tiles, tileSize: t)
+    }
+
+    static func sharpness(gray px: [UInt8], size n: Int, tiles: Int, tileSize t: Int) -> Double {
+        var best = 0.0
+        for ty in 0..<tiles {
+            for tx in 0..<tiles {
+                var sum = 0.0, count = 0.0
+                for y in max(1, ty * t)..<min(n - 1, (ty + 1) * t) {
+                    for x in max(1, tx * t)..<min(n - 1, (tx + 1) * t) {
+                        let c = 4 * Int(px[y * n + x])
+                        let l = c - Int(px[y * n + x - 1]) - Int(px[y * n + x + 1])
+                              - Int(px[(y - 1) * n + x]) - Int(px[(y + 1) * n + x])
+                        sum += Double(abs(l)); count += 1
+                    }
+                }
+                if count > 0 { best = max(best, sum / count) }
+            }
+        }
+        return best
     }
 
     /// Differenz-Hash: 9×8 Graustufen, je Zeile Nachbarn vergleichen → 64 Bit.

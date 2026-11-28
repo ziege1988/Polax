@@ -397,6 +397,12 @@ struct DeviantArtProvider: ImageProvider {
         let thumbs: [Media]?
         let is_mature: Bool?
     }
+    /// Entfernt eine Weichzeichner-Anweisung („,blur_30“) aus DeviantArt-/Wix-Bildadressen.
+    static func unblurred(_ src: String?) -> String? {
+        guard let src else { return nil }
+        return src.replacingOccurrences(of: #",blu?r_[0-9]+"#, with: "", options: .regularExpression)
+    }
+
     private struct Author: Decodable { let username: String? }
     private struct Media: Decodable { let src: String }
 
@@ -436,12 +442,12 @@ struct DeviantArtProvider: ImageProvider {
         let tag = usedTags.joined(separator: " ")
         return resp.results.compactMap { r in
             if !collection.allowNudity, r.is_mature == true { return nil }
-            guard let img = HTTP.secureURL(r.content?.src ?? r.preview?.src) else { return nil }
-            let thumb = HTTP.secureURL(r.thumbs?.last?.src ?? r.preview?.src) ?? img
+            guard let img = HTTP.secureURL(Self.unblurred(r.content?.src ?? r.preview?.src)) else { return nil }
+            let thumb = HTTP.secureURL(Self.unblurred(r.thumbs?.last?.src ?? r.preview?.src)) ?? img
             return PhotoCandidate(
                 id: "deviantart:\(r.deviationid)", source: .deviantart, origin: "deviantart",
                 title: r.title ?? "", author: r.author?.username ?? "",
-                imageURL: img, fallbackImageURL: HTTP.secureURL(r.preview?.src), thumbURL: thumb,
+                imageURL: img, fallbackImageURL: HTTP.secureURL(Self.unblurred(r.preview?.src)), thumbURL: thumb,
                 pageURL: HTTP.secureURL(r.url),
                 tags: [tag] + (r.title ?? "").split(separator: " ").map(String.init), query: query)
         }
